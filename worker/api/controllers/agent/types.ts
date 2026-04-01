@@ -26,4 +26,17 @@ export interface AgentConnectionData {
     agentId: string;
 }
 
+/**
+ * Data structure for buildApp response
+ */
+export interface AgentBuildResponse {
+    agentId: string;
+    previewUrl: string;
+    httpStatusUrl: string;
+    projectType: string;
+    template: {
+        name: string;
+    };
+}
+
 export type AgentPreviewResponse = PreviewType;
