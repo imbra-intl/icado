@@ -13,27 +13,10 @@ Simply include your API Key in the `X-API-Key` header or as a `Bearer` token.
 
 ---
 
-## 🏗️ 2. Create a New App (Simplified)
-
-This single endpoint creates the project **AND** starts code generation in the background automatically. Use this if you don't want to handle WebSockets.
+## 🏗️ 2. Create a New App
 
 *   **Method**: `POST`
-*   **URL**: `https://YOUR_DOMAIN/api/agent/build`
-
-#### **cURL Example**
-```bash
-curl -X POST https://YOUR_DOMAIN/api/agent/build \
-  -H "X-API-Key: YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "Create a simple landing page",
-    "projectType": "app"
-  }'
-```
-
----
-
-## 🏗️ 3. Create a New App (Streaming)
+*   **URL**: `https://YOUR_DOMAIN/api/agent`
 
 #### **cURL Example**
 ```bash

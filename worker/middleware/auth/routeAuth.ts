@@ -15,8 +15,8 @@ import { RateLimitExceededError } from 'shared/types/errors';
 import * as Sentry from '@sentry/cloudflare';
 import { getUserConfigurableSettings } from 'worker/config';
 import { authenticateViaTicket, hasTicketParam } from './ticketAuth';
-import { ApiKeyService } from '../../database/services/ApiKeyService';
-import { UserService } from '../../database/services/UserService';
+import { ApiKeyService } from '../../services/api-keys/ApiKeyService';
+import { UserService } from '../../services/user/UserService';
 import { sha256Hash } from '../../utils/cryptoUtils';
 import { mapUserResponse } from '../../utils/authUtils';
 

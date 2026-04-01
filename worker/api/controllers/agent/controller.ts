@@ -5,7 +5,6 @@ import { AgentState } from '../../../agents/core/state';
 import { BehaviorType, ProjectType } from '../../../agents/core/types';
 import { getAgentStub, getTemplateForQuery } from '../../../agents';
 import {
-    AgentBuildResponse,
     AgentConnectionData,
     AgentPreviewResponse,
     CodeGenArgs,
@@ -49,104 +48,6 @@ const resolveProjectType = (body: CodeGenArgs): ProjectType | 'auto' => {
  */
 export class CodingAgentController extends BaseController {
     static logger = createLogger('CodingAgentController');
-
-    /**
-     * Simplified build endpoint - creates AND starts generation in one call
-     * Returns a JSON response with project details and preview URL
-     */
-    static async buildApp(
-        request: Request,
-        env: Env,
-        _: ExecutionContext,
-        context: RouteContext
-    ): Promise<ControllerResponse<ApiResponse<AgentBuildResponse>>> {
-        try {
-            this.logger.info('Starting simplified build process');
-            const url = new URL(request.url);
-            const hostname = url.hostname === 'localhost' ? `localhost:${url.port}`: getPreviewDomain(env);
-
-            let body: CodeGenArgs;
-            try {
-                body = await request.json() as CodeGenArgs;
-            } catch (error) {
-                return CodingAgentController.createErrorResponse(`Invalid JSON: ${JSON.stringify(error)}`, 400);
-            }
-
-            const query = body.query;
-            if (!query || query.trim().length === 0) {
-                return CodingAgentController.createErrorResponse('Missing "query"', 400);
-            }
-
-            const user = context.user!;
-            await RateLimitService.enforceAppCreationRateLimit(env, context.config.security.rateLimit, user, request);
-
-            const agentId = generateId();
-            const modelConfigService = new ModelConfigService(env);
-            const projectType = resolveProjectType(body);
-            const behaviorType = resolveBehaviorType(body);
-
-            const userConfigsRecord = await modelConfigService.getUserModelConfigs(user.id);
-            const userModelConfigs: Record<string, ModelConfig> = {};
-            for (const [actionKey, mergedConfig] of Object.entries(userConfigsRecord)) {
-                if (mergedConfig.isUserOverride) {
-                    const { isUserOverride, userConfigId, ...modelConfig } = mergedConfig;
-                    userModelConfigs[actionKey] = modelConfig;
-                }
-            }
-
-            const inferenceContext = {
-                metadata: { agentId, userId: user.id },
-                userModelConfigs,
-                runtimeOverrides: credentialsToRuntimeOverrides(body.credentials),
-            };
-
-            const { templateDetails, selection, projectType: finalProjectType } = await getTemplateForQuery(
-                env, inferenceContext, query, projectType, body.images, this.logger, body.selectedTemplate
-            );
-
-            let uploadedImages: ProcessedImageAttachment[] = [];
-            if (body.images) {
-                uploadedImages = await Promise.all(body.images.map(image => uploadImage(env, image, ImageType.UPLOADS)));
-            }
-
-            const agentInstance = await getAgentStub(env, agentId, { behaviorType, projectType: finalProjectType });
-            
-            const initArgs = {
-                query,
-                language: body.language || defaultCodeGenArgs.language,
-                frameworks: body.frameworks || defaultCodeGenArgs.frameworks,
-                hostname,
-                inferenceContext,
-                images: uploadedImages,
-                templateInfo: { templateDetails, selection }
-            };
-
-            // Initialize agent (waits for planning/blueprint)
-            await agentInstance.initialize(initArgs);
-            
-            // Start generation in background
-            agentInstance.getBehavior().generateAllFiles().catch(error => {
-                this.logger.error(`Error in background generation for ${agentId}:`, error);
-            });
-
-            const previewUrl = `https://${agentId}.${hostname}`;
-            const httpStatusUrl = `${url.origin}/api/agent/${agentId}`;
-
-            return CodingAgentController.createSuccessResponse({
-                agentId,
-                previewUrl,
-                httpStatusUrl,
-                projectType: finalProjectType,
-                template: {
-                    name: templateDetails.name
-                }
-            });
-        } catch (error) {
-            this.logger.error('Error in buildApp', error);
-            return CodingAgentController.handleError(error, 'build app');
-        }
-    }
-
     /**
      * Start the incremental code generation process
      */
