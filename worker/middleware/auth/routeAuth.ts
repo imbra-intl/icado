@@ -15,10 +15,6 @@ import { RateLimitExceededError } from 'shared/types/errors';
 import * as Sentry from '@sentry/cloudflare';
 import { getUserConfigurableSettings } from 'worker/config';
 import { authenticateViaTicket, hasTicketParam } from './ticketAuth';
-import { ApiKeyService } from '../../services/api-keys/ApiKeyService';
-import { UserService } from '../../services/user/UserService';
-import { sha256Hash } from '../../utils/cryptoUtils';
-import { mapUserResponse } from '../../utils/authUtils';
 
 const logger = createLogger('RouteAuth');
 
@@ -157,60 +153,6 @@ export async function routeAuthChecks(
     }
 }
 
-/**
- * Direct API Key authentication strategy
- */
-async function authenticateViaApiKey(request: Request, env: Env): Promise<{ user: AuthUser; sessionId: string } | null> {
-    const authHeader = request.headers.get('Authorization')?.trim();
-    const xApiKey = request.headers.get('X-API-Key')?.trim();
-
-    let apiKeyRaw: string | null = null;
-    if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
-        const potentialKey = authHeader.slice(7).trim();
-        // Simple heuristic: if it contains a '.', it's probably a JWT, not a raw API key
-        if (!potentialKey.includes('.')) {
-            apiKeyRaw = potentialKey;
-        }
-    } else if (xApiKey) {
-        apiKeyRaw = xApiKey;
-    }
-
-    if (!apiKeyRaw || apiKeyRaw.length > 256 || !/^[A-Za-z0-9_-]+$/.test(apiKeyRaw)) {
-        return null;
-    }
-
-    try {
-        const keyHash = await sha256Hash(apiKeyRaw);
-        const apiKeyService = new ApiKeyService(env);
-        const apiKey = await apiKeyService.findApiKeyByHash(keyHash);
-        
-        if (!apiKey) {
-            return null;
-        }
-
-        const userService = new UserService(env);
-        const user = await userService.findUser({ id: apiKey.userId });
-        
-        if (!user || user.deletedAt || !user.isActive || user.isSuspended) {
-            return null;
-        }
-
-        if (user.lockedUntil && user.lockedUntil > new Date()) {
-            return null;
-        }
-
-        await apiKeyService.updateApiKeyLastUsed(apiKey.id);
-        
-        return {
-            user: mapUserResponse(user),
-            sessionId: `api_key:${apiKey.id}`
-        };
-    } catch (error) {
-        logger.error('API key authentication error', error);
-        return null;
-    }
-}
-
 /*
  * Enforce authentication requirement
  */
@@ -251,23 +193,7 @@ export async function enforceAuthRequirement(c: Context<AppEnv>) : Promise<Respo
             }
         }
         
-        // Strategy 2: Direct API Key auth (for programmatic access)
-        if (!user) {
-            const apiKeyAuth = await authenticateViaApiKey(request, env);
-            if (apiKeyAuth) {
-                user = apiKeyAuth.user;
-                c.set('user', user);
-                c.set('sessionId', apiKeyAuth.sessionId);
-                Sentry.setUser({ id: user.id, email: user.email });
-
-                const config = await getUserConfigurableSettings(c.env, user.id);
-                c.set('config', config);
-
-                logger.info('Authenticated via API Key', { userId: user.id });
-            }
-        }
-        
-        // Strategy 3: Standard JWT auth (header/cookie)
+        // Strategy 2: Standard JWT auth (header/cookie)
         if (!user) {
             const userSession = await authMiddleware(c.req.raw, c.env);
             if (!userSession) {

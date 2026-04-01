@@ -41,13 +41,6 @@ export function createApp(env: Env): Hono<AppEnv> {
             return next();
         }
         
-        // Skip CSRF for programmatic API requests (using API Keys or Bearer tokens)
-        const authHeader = c.req.header('authorization');
-        const xApiKey = c.req.header('x-api-key');
-        if (authHeader || xApiKey) {
-            return next();
-        }
-        
         try {
             // Handle GET requests - establish CSRF token if needed
             if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {

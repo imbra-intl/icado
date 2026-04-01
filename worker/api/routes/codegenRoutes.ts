@@ -12,9 +12,6 @@ export function setupCodegenRoutes(app: Hono<AppEnv>): void {
     // CODE GENERATION ROUTES
     // ========================================
     
-    // Simplified build endpoint - creates AND starts generation in one call
-    app.post('/api/agent/build', setAuthLevel(AuthConfig.authenticated), adaptController(CodingAgentController, CodingAgentController.buildApp));
-
     // CRITICAL: Create new app - requires full authentication
     app.post('/api/agent', setAuthLevel(AuthConfig.authenticated), adaptController(CodingAgentController, CodingAgentController.startCodeGeneration));
     
