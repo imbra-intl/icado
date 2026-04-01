@@ -14,7 +14,7 @@
 # Or call it directly:
 #   bash gateway/vibesdk.sh GET /api/apps
 
-VIBESDK_BASE_URL="${VIBESDK_BASE_URL:-https://build.cloudflare.dev}"
+VIBESDK_BASE_URL="${VIBESDK_BASE_URL:-https://imbra.site}"
 
 _vibesdk_get_token() {
     if [[ -z "$VIBESDK_API_KEY" ]]; then

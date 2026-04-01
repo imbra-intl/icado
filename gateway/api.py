@@ -31,7 +31,7 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 
-BASE_URL = os.environ.get("VIBESDK_BASE_URL", "https://build.cloudflare.dev").rstrip("/")
+BASE_URL = os.environ.get("VIBESDK_BASE_URL", "https://imbra.site").rstrip("/")
 API_KEY  = os.environ.get("VIBESDK_API_KEY", "")
 
 # ── token cache ──────────────────────────────────────────────────────────────
