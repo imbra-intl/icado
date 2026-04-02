@@ -266,6 +266,7 @@ export interface AuthProvidersResponseData {
   providers: {
     google: boolean;
     github: boolean;
+    frappe: boolean;
     email: boolean;
   };
   hasOAuth: boolean;

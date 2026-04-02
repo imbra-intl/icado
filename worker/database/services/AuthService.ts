@@ -11,6 +11,7 @@ import { SessionService } from './SessionService';
 import { PasswordService } from '../../utils/passwordService';
 import { GoogleOAuthProvider } from '../../services/oauth/google';
 import { GitHubOAuthProvider } from '../../services/oauth/github';
+import { FrappeOAuthProvider } from '../../services/oauth/frappe';
 import { BaseOAuthProvider } from '../../services/oauth/base';
 import { 
     SecurityError, 
@@ -270,6 +271,8 @@ export class AuthService extends BaseService {
                 return GoogleOAuthProvider.create(this.env, url);
             case 'github':
                 return GitHubOAuthProvider.create(this.env, url);
+            case 'frappe':
+                return FrappeOAuthProvider.create(this.env, url);
             default:
                 throw new SecurityError(
                     SecurityErrorType.INVALID_INPUT,
@@ -523,7 +526,7 @@ export class AuthService extends BaseService {
             
             await this.database.insert(schema.authAttempts).values({
                 identifier: identifier.toLowerCase(),
-                attemptType: attemptType as 'login' | 'register' | 'oauth_google' | 'oauth_github' | 'refresh' | 'reset_password',
+                attemptType: attemptType as 'login' | 'register' | 'oauth_google' | 'oauth_github' | 'oauth_frappe' | 'refresh' | 'reset_password',
                 success: success,
                 ipAddress: requestMetadata.ipAddress
             });

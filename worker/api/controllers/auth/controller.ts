@@ -31,12 +31,30 @@ import { createLogger } from '../../../logger';
  */
 export class AuthController extends BaseController {
     static logger = createLogger('AuthController');
+
+    private static getEnvString(env: Env, key: string): string | undefined {
+        const value = (env as unknown as Record<string, unknown>)[key];
+        if (typeof value !== 'string') {
+            return undefined;
+        }
+        const trimmed = value.trim();
+        return trimmed.length > 0 ? trimmed : undefined;
+    }
+
+    static hasFrappeOAuthProvider(env: Env): boolean {
+        const clientId = this.getEnvString(env, 'FRAPPE_CLIENT_ID');
+        const clientSecret = this.getEnvString(env, 'FRAPPE_CLIENT_SECRET');
+        const baseUrl = this.getEnvString(env, 'FRAPPE_OAUTH_BASE_URL') || this.getEnvString(env, 'FRAPPE_BASE_URL');
+        return !!clientId && !!clientSecret && !!baseUrl;
+    }
+
     /**
      * Check if OAuth providers are configured
      */
     static hasOAuthProviders(env: Env): boolean {
         return (!!env.GOOGLE_CLIENT_ID && !!env.GOOGLE_CLIENT_SECRET) || 
-               (!!env.GITHUB_CLIENT_ID && !!env.GITHUB_CLIENT_SECRET);
+               (!!env.GITHUB_CLIENT_ID && !!env.GITHUB_CLIENT_SECRET) ||
+               this.hasFrappeOAuthProvider(env);
     }
     
     /**
@@ -148,7 +166,7 @@ export class AuthController extends BaseController {
             return AuthController.handleError(error, 'login user');
         }
     }
-    
+
     /**
      * Logout current user
      * POST /api/auth/logout
@@ -741,10 +759,14 @@ export class AuthController extends BaseController {
         _context: RouteContext
     ): Promise<Response> {
         try {
+            const hasGoogle = !!env.GOOGLE_CLIENT_ID && !!env.GOOGLE_CLIENT_SECRET;
+            const hasGitHub = !!env.GITHUB_CLIENT_ID && !!env.GITHUB_CLIENT_SECRET;
+            const hasFrappe = AuthController.hasFrappeOAuthProvider(env);
             const providers = {
-                google: !!env.GOOGLE_CLIENT_ID && !!env.GOOGLE_CLIENT_SECRET,
-                github: !!env.GITHUB_CLIENT_ID && !!env.GITHUB_CLIENT_SECRET,
-                email: true
+                google: hasGoogle,
+                github: hasGitHub,
+                email: true,
+                frappe: hasFrappe
             };
             
             // Include CSRF token with provider info
@@ -752,8 +774,8 @@ export class AuthController extends BaseController {
             
             const response = AuthController.createSuccessResponse({
                 providers,
-                hasOAuth: providers.google || providers.github,
-                requiresEmailAuth: !providers.google && !providers.github,
+                hasOAuth: providers.google || providers.github || providers.frappe,
+                requiresEmailAuth: !(providers.google || providers.github || providers.frappe),
                 csrfToken,
                 csrfExpiresIn: Math.floor(CsrfService.defaults.tokenTTL / 1000)
             });

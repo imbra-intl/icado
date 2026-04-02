@@ -9,6 +9,7 @@ import { X, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { useAuth } from '@/contexts/auth-context';
+import type { OAuthProvider } from '@/api-types';
 // import {
 // 	validateEmail,
 // 	validatePassword,
@@ -20,14 +21,14 @@ interface LoginModalProps {
 	onClose: () => void;
 
 	// Original OAuth-only interface (for backward compatibility)
-	onLogin: (provider: 'google' | 'github') => void;
+	onLogin: (provider: OAuthProvider) => void;
 
 	// New enhanced interfaces (optional)
 	onEmailLogin?: (credentials: {
 		email: string;
 		password: string;
 	}) => Promise<void>;
-	onOAuthLogin?: (provider: 'google' | 'github', redirectUrl?: string) => void;
+	onOAuthLogin?: (provider: OAuthProvider, redirectUrl?: string) => void;
 	onRegister?: (data: {
 		email: string;
 		password: string;
@@ -76,6 +77,7 @@ export function LoginModal({
 	const hasRegistration = requiresEmailAuth && !!onRegister;
 	const showGitHub = authProviders?.github && hasOAuth;
 	const showGoogle = authProviders?.google && hasOAuth;
+	const showFrappe = authProviders?.frappe && hasOAuth;
 
 	const resetForm = () => {
 		setEmail('');
@@ -156,7 +158,7 @@ export function LoginModal({
 		}
 	};
 
-	const handleOAuthClick = (provider: 'google' | 'github') => {
+	const handleOAuthClick = (provider: OAuthProvider) => {
 		// Use the new interface if available, otherwise fall back to original
 		if (onOAuthLogin) {
 			// Pass the current URL as redirect URL for context preservation
@@ -246,6 +248,21 @@ export function LoginModal({
 
 							{/* Authentication Options */}
 							<div className={clsx('p-6 space-y-5 pt-12')}>
+								{/* Frappe */}
+								{showFrappe && (
+									<motion.button
+										whileTap={{ scale: 0.98 }}
+										onClick={() => handleOAuthClick('frappe')}
+										className="w-full group relative overflow-hidden rounded-xl bg-[#0f172a] p-4 text-white transition-all hover:bg-[#1e293b] border border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+									>
+										<div className="relative z-10 flex items-center justify-center gap-3">
+											<div className="h-5 w-5 rounded-full bg-white/20 flex items-center justify-center text-xs font-semibold">F</div>
+											<span className="font-medium">Continue with Frappe</span>
+										</div>
+										<div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/10 to-transparent group-hover:translate-x-full transition-transform duration-700" />
+									</motion.button>
+								)}
+
 								{/* GitHub */}
 								{showGitHub && (
 									<motion.button

@@ -23,6 +23,7 @@ import { ImageType, uploadImage } from 'worker/utils/images';
 import { ProcessedImageAttachment } from 'worker/types/image-attachment';
 import { getTemplateImportantFiles } from 'worker/services/sandbox/utils';
 import { hasTicketParam } from '../../../middleware/auth/ticketAuth';
+import { FrappeBridgeService } from '../../../services/frappe/FrappeBridgeService';
 
 const defaultCodeGenArgs: Partial<CodeGenArgs> = {
     language: 'typescript',
@@ -51,7 +52,7 @@ export class CodingAgentController extends BaseController {
     /**
      * Start the incremental code generation process
      */
-    static async startCodeGeneration(request: Request, env: Env, _: ExecutionContext, context: RouteContext): Promise<Response> {
+    static async startCodeGeneration(request: Request, env: Env, ctx: ExecutionContext, context: RouteContext): Promise<Response> {
         try {
             this.logger.info('Starting code generation process');
 
@@ -101,6 +102,18 @@ export class CodingAgentController extends BaseController {
                     this.logger.error('Unknown error in enforceAppCreationRateLimit', error);
                     return CodingAgentController.createErrorResponse(JSON.stringify(error), 429);
                 }
+            }
+
+            const frappeBridgeService = new FrappeBridgeService(env);
+            const validationResult = await frappeBridgeService.validateProjectGeneration(request, {
+                user,
+                query,
+            });
+            if (!validationResult.allowed) {
+                return CodingAgentController.createErrorResponse(
+                    validationResult.reason || 'Project generation is not allowed for this user',
+                    403,
+                );
             }
 
             const agentId = generateId();
@@ -164,6 +177,23 @@ export class CodingAgentController extends BaseController {
                     files: getTemplateImportantFiles(templateDetails),
                 }
             });
+
+            ctx.waitUntil((async () => {
+                const synced = await frappeBridgeService.syncCreatedProject(request, {
+                    user,
+                    agentId,
+                    query,
+                    websocketUrl,
+                    httpStatusUrl,
+                    behaviorType,
+                    projectType: finalProjectType,
+                });
+
+                if (!synced) {
+                    this.logger.warn(`Failed to sync project ${agentId} to frappe`);
+                }
+            })());
+
             const agentInstance = await getAgentStub(env, agentId, { behaviorType, projectType: finalProjectType });
 
             const baseInitArgs = {
