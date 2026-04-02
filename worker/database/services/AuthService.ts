@@ -265,20 +265,34 @@ export class AuthService extends BaseService {
 
     async getOauthProvider(provider: OAuthProvider, request: Request): Promise<BaseOAuthProvider> {
         const url = new URL(request.url).origin;
-        
-        switch (provider) {
-            case 'google':
-                return GoogleOAuthProvider.create(this.env, url);
-            case 'github':
-                return GitHubOAuthProvider.create(this.env, url);
-            case 'frappe':
-                return FrappeOAuthProvider.create(this.env, url);
-            default:
-                throw new SecurityError(
-                    SecurityErrorType.INVALID_INPUT,
-                    `OAuth provider ${provider} not configured`,
-                    400
-                );
+
+        try {
+            switch (provider) {
+                case 'google':
+                    return GoogleOAuthProvider.create(this.env, url);
+                case 'github':
+                    return GitHubOAuthProvider.create(this.env, url);
+                case 'frappe':
+                    return FrappeOAuthProvider.create(this.env, url);
+                default:
+                    throw new SecurityError(
+                        SecurityErrorType.INVALID_INPUT,
+                        `OAuth provider ${provider} not configured`,
+                        400
+                    );
+            }
+        } catch (error) {
+            if (error instanceof SecurityError) {
+                throw error;
+            }
+            const message = error instanceof Error
+                ? error.message
+                : `OAuth provider ${provider} not configured`;
+            throw new SecurityError(
+                SecurityErrorType.INVALID_INPUT,
+                message,
+                400
+            );
         }
     }
     
