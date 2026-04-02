@@ -26,26 +26,15 @@ import { authMiddleware } from '../../../middleware/auth/auth';
 import { CsrfService } from '../../../services/csrf/CsrfService';
 import { BaseController } from '../baseController';
 import { createLogger } from '../../../logger';
+import { FrappeOAuthProvider } from '../../../services/oauth/frappe';
 /**
  * Authentication Controller
  */
 export class AuthController extends BaseController {
     static logger = createLogger('AuthController');
 
-    private static getEnvString(env: Env, key: string): string | undefined {
-        const value = (env as unknown as Record<string, unknown>)[key];
-        if (typeof value !== 'string') {
-            return undefined;
-        }
-        const trimmed = value.trim();
-        return trimmed.length > 0 ? trimmed : undefined;
-    }
-
     static hasFrappeOAuthProvider(env: Env): boolean {
-        const clientId = this.getEnvString(env, 'FRAPPE_CLIENT_ID');
-        const clientSecret = this.getEnvString(env, 'FRAPPE_CLIENT_SECRET');
-        const baseUrl = this.getEnvString(env, 'FRAPPE_OAUTH_BASE_URL') || this.getEnvString(env, 'FRAPPE_BASE_URL');
-        return !!clientId && !!clientSecret && !!baseUrl;
+        return FrappeOAuthProvider.isConfigured(env);
     }
 
     /**

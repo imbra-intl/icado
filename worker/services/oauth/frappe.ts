@@ -42,6 +42,25 @@ function resolveUrl(baseUrl: string, endpointPath: string): string {
 	return new URL(endpointPath, baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`).toString();
 }
 
+function envFromKeys(env: Env, keys: string[]): string | undefined {
+	for (const key of keys) {
+		const value = envString(env, key);
+		if (value) {
+			return value;
+		}
+	}
+	return undefined;
+}
+
+interface FrappeOAuthEnvConfig {
+	clientId: string;
+	clientSecret: string;
+	authorizationUrl: string;
+	tokenUrl: string;
+	userInfoUrl: string;
+	scopes: string[];
+}
+
 /**
  * Frappe OAuth Provider implementation
  */
@@ -216,39 +235,96 @@ export class FrappeOAuthProvider extends BaseOAuthProvider {
 	 * - FRAPPE_CLIENT_ID
 	 * - FRAPPE_CLIENT_SECRET
 	 * - FRAPPE_BASE_URL or FRAPPE_OAUTH_BASE_URL
+	 *   (or explicit FRAPPE_OAUTH_AUTHORIZE_URL, FRAPPE_OAUTH_TOKEN_URL, FRAPPE_OAUTH_USERINFO_URL)
 	 */
-	static create(env: Env, baseUrl: string): FrappeOAuthProvider {
-		const clientId = envString(env, 'FRAPPE_CLIENT_ID');
-		const clientSecret = envString(env, 'FRAPPE_CLIENT_SECRET');
-		const frappeBaseUrl = envString(env, 'FRAPPE_OAUTH_BASE_URL') || envString(env, 'FRAPPE_BASE_URL');
+	private static resolveConfig(env: Env): {
+		config?: FrappeOAuthEnvConfig;
+		missing: string[];
+	} {
+		const clientId = envFromKeys(env, ['FRAPPE_CLIENT_ID']);
+		const clientSecret = envFromKeys(env, ['FRAPPE_CLIENT_SECRET']);
+		const frappeBaseUrl = envFromKeys(env, [
+			'FRAPPE_OAUTH_BASE_URL',
+			'FRAPPE_BASE_URL',
+			'FRAPPE_URL',
+		]);
+		const explicitAuthorizationUrl = envString(env, 'FRAPPE_OAUTH_AUTHORIZE_URL');
+		const explicitTokenUrl = envString(env, 'FRAPPE_OAUTH_TOKEN_URL');
+		const explicitUserInfoUrl = envString(env, 'FRAPPE_OAUTH_USERINFO_URL');
 
-		if (!clientId || !clientSecret || !frappeBaseUrl) {
-			throw new Error('Frappe OAuth credentials not configured');
+		const missing: string[] = [];
+		if (!clientId) {
+			missing.push('FRAPPE_CLIENT_ID');
+		}
+		if (!clientSecret) {
+			missing.push('FRAPPE_CLIENT_SECRET');
+		}
+
+		const hasExplicitEndpoints = Boolean(
+			explicitAuthorizationUrl &&
+			explicitTokenUrl &&
+			explicitUserInfoUrl,
+		);
+		if (!frappeBaseUrl && !hasExplicitEndpoints) {
+			missing.push(
+				'FRAPPE_BASE_URL/FRAPPE_OAUTH_BASE_URL (or all FRAPPE_OAUTH_AUTHORIZE_URL, FRAPPE_OAUTH_TOKEN_URL, FRAPPE_OAUTH_USERINFO_URL)',
+			);
+		}
+
+		if (missing.length > 0) {
+			return { missing };
 		}
 
 		const authorizationUrl =
-			envString(env, 'FRAPPE_OAUTH_AUTHORIZE_URL') ||
-			resolveUrl(frappeBaseUrl, '/api/method/frappe.integrations.oauth2.authorize');
+			explicitAuthorizationUrl ||
+			resolveUrl(frappeBaseUrl!, '/api/method/frappe.integrations.oauth2.authorize');
 		const tokenUrl =
-			envString(env, 'FRAPPE_OAUTH_TOKEN_URL') ||
-			resolveUrl(frappeBaseUrl, '/api/method/frappe.integrations.oauth2.get_token');
+			explicitTokenUrl ||
+			resolveUrl(frappeBaseUrl!, '/api/method/frappe.integrations.oauth2.get_token');
 		const userInfoUrl =
-			envString(env, 'FRAPPE_OAUTH_USERINFO_URL') ||
-			resolveUrl(frappeBaseUrl, '/api/method/frappe.integrations.oauth2.openid_profile');
+			explicitUserInfoUrl ||
+			resolveUrl(frappeBaseUrl!, '/api/method/frappe.integrations.oauth2.openid_profile');
 
 		const scopesRaw = envString(env, 'FRAPPE_OAUTH_SCOPES');
-		const scopes = scopesRaw ? scopesRaw.split(/\s+/).filter(Boolean) : ['openid', 'email', 'profile'];
+		const scopes = scopesRaw
+			? scopesRaw.split(/\s+/).filter(Boolean)
+			: ['openid', 'email', 'profile'];
+
+		return {
+			missing: [],
+			config: {
+				clientId: clientId!,
+				clientSecret: clientSecret!,
+				authorizationUrl,
+				tokenUrl,
+				userInfoUrl,
+				scopes,
+			},
+		};
+	}
+
+	static isConfigured(env: Env): boolean {
+		return this.resolveConfig(env).missing.length === 0;
+	}
+
+	static create(env: Env, baseUrl: string): FrappeOAuthProvider {
+		const { config, missing } = this.resolveConfig(env);
+		if (!config) {
+			throw new Error(
+				`Frappe OAuth credentials not configured. Missing: ${missing.join(', ')}`,
+			);
+		}
 
 		const redirectUri = `${baseUrl}/api/auth/callback/frappe`;
 
 		return new FrappeOAuthProvider(
-			clientId,
-			clientSecret,
+			config.clientId,
+			config.clientSecret,
 			redirectUri,
-			authorizationUrl,
-			tokenUrl,
-			userInfoUrl,
-			scopes,
+			config.authorizationUrl,
+			config.tokenUrl,
+			config.userInfoUrl,
+			config.scopes,
 		);
 	}
 }
