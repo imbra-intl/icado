@@ -244,8 +244,8 @@ export class FrappeOAuthProvider extends BaseOAuthProvider {
 		const clientId = envFromKeys(env, ['FRAPPE_CLIENT_ID']);
 		const clientSecret = envFromKeys(env, ['FRAPPE_CLIENT_SECRET']);
 		const frappeBaseUrl = envFromKeys(env, [
-			'FRAPPE_OAUTH_BASE_URL',
 			'FRAPPE_BASE_URL',
+			'FRAPPE_OAUTH_BASE_URL',
 			'FRAPPE_URL',
 		]);
 		const explicitAuthorizationUrl = envString(env, 'FRAPPE_OAUTH_AUTHORIZE_URL');
