@@ -116,6 +116,18 @@ export class CodingAgentController extends BaseController {
                 );
             }
 
+            const creditValidation = await frappeBridgeService.validateCredits(request, {
+                user,
+                action: 'create_project',
+                query,
+            });
+            if (!creditValidation.allowed) {
+                return CodingAgentController.createErrorResponse(
+                    creditValidation.reason || 'Insufficient credits',
+                    402,
+                );
+            }
+
             const agentId = generateId();
             const modelConfigService = new ModelConfigService(env);
             const projectType = resolveProjectType(body);

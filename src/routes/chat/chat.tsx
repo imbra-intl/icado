@@ -34,6 +34,8 @@ import { MainContentPanel } from './components/main-content-panel';
 import { ChatInput } from './components/chat-input';
 import { useVault } from '@/hooks/use-vault';
 import { VaultUnlockModal } from '@/components/vault';
+import { apiClient } from '@/lib/api-client';
+import { toast } from 'sonner';
 
 const isPhasicBlueprint = (blueprint?: BlueprintType | null): blueprint is PhasicBlueprint =>
 	!!blueprint && 'implementationRoadmap' in blueprint;
@@ -258,6 +260,7 @@ export default function Chat() {
 
 	const [newMessage, setNewMessage] = useState('');
 	const [showTooltip, setShowTooltip] = useState(false);
+	const [isValidatingCredits, setIsValidatingCredits] = useState(false);
 
 	const { images, addImages, removeImage, clearImages, isProcessing } = useImageUpload({
 		onError: (error) => {
@@ -563,16 +566,40 @@ export default function Chat() {
 	const { isDragging: isChatDragging, dragHandlers: chatDragHandlers } = useDragDrop({
 		onFilesDropped: addImages,
 		accept: [...SUPPORTED_IMAGE_MIME_TYPES],
-		disabled: isChatDisabled,
+		disabled: isChatDisabled || isValidatingCredits,
 	});
 
 	const onNewMessage = useCallback(
-		(e: FormEvent) => {
+		async (e: FormEvent) => {
 			e.preventDefault();
 
 			// Don't submit if chat is disabled or message is empty
-			if (isChatDisabled || !newMessage.trim()) {
+			if (isChatDisabled || isValidatingCredits || !newMessage.trim()) {
 				return;
+			}
+
+			try {
+				setIsValidatingCredits(true);
+				const validation = await apiClient.validateCredits({
+					action: 'chat_input',
+					query: newMessage,
+					agentId: chatId || urlChatId,
+				});
+
+				if (!validation.success || !validation.data?.allowed) {
+					const reason =
+						validation.data?.reason ||
+						validation.error?.message ||
+						'Insufficient credits';
+					toast.error(reason);
+					return;
+				}
+			} catch (error) {
+				const message = error instanceof Error ? error.message : 'Failed to validate credits';
+				toast.error(message);
+				return;
+			} finally {
+				setIsValidatingCredits(false);
 			}
 
 			// When generation is active, send as conversational AI suggestion
@@ -592,7 +619,18 @@ export default function Chat() {
 			// Ensure we scroll after sending our own message
 			requestAnimationFrame(() => scrollToBottom());
 		},
-		[newMessage, websocket, sendUserMessage, isChatDisabled, scrollToBottom, images, clearImages],
+		[
+			newMessage,
+			websocket,
+			sendUserMessage,
+			isChatDisabled,
+			isValidatingCredits,
+			scrollToBottom,
+			images,
+			clearImages,
+			chatId,
+			urlChatId,
+		],
 	);
 
 	const [progress, total] = useMemo((): [number, number] => {
@@ -786,7 +824,7 @@ export default function Chat() {
 					isProcessing={isProcessing}
 					isChatDragging={isChatDragging}
 					chatDragHandlers={chatDragHandlers}
-					isChatDisabled={isChatDisabled}
+					isChatDisabled={isChatDisabled || isValidatingCredits}
 					isRunning={isRunning}
 					isGenerating={isGenerating}
 					isGeneratingBlueprint={isGeneratingBlueprint}

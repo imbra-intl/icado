@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { useFeature } from '@/features';
+import { apiClient } from '@/lib/api-client';
 import { ProjectModeSelector, type ProjectModeOption } from '@/components/project-mode-selector';
 import {
 	MAX_AGENT_QUERY_LENGTH,
@@ -27,6 +28,7 @@ export function CreateProjectPanel() {
 	const [currentPlaceholderPhraseIndex, setCurrentPlaceholderPhraseIndex] = useState(0);
 	const [currentPlaceholderText, setCurrentPlaceholderText] = useState('');
 	const [isPlaceholderTyping, setIsPlaceholderTyping] = useState(true);
+	const [isValidatingCredits, setIsValidatingCredits] = useState(false);
 
 	const modeOptions = useMemo<ProjectModeOption[]>(() => {
 		if (isLoadingCapabilities || !capabilities) return [];
@@ -116,7 +118,11 @@ export function CreateProjectPanel() {
 		textareaRef.current.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
 	};
 
-	const handleCreateApp = () => {
+	const handleCreateApp = async () => {
+		if (isValidatingCredits) {
+			return;
+		}
+
 		if (query.length > MAX_AGENT_QUERY_LENGTH) {
 			toast.error(
 				`Prompt too large (${query.length} characters). Maximum allowed is ${MAX_AGENT_QUERY_LENGTH} characters.`,
@@ -142,6 +148,29 @@ export function CreateProjectPanel() {
 			return;
 		}
 
+		try {
+			setIsValidatingCredits(true);
+			const validation = await apiClient.validateCredits({
+				action: 'create_project',
+				query,
+			});
+
+			if (!validation.success || !validation.data?.allowed) {
+				const reason =
+					validation.data?.reason ||
+					validation.error?.message ||
+					'Insufficient credits';
+				toast.error(reason);
+				return;
+			}
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Failed to validate credits';
+			toast.error(message);
+			return;
+		} finally {
+			setIsValidatingCredits(false);
+		}
+
 		navigate(intendedUrl);
 		clearImages();
 	};
@@ -157,7 +186,7 @@ export function CreateProjectPanel() {
 				method="POST"
 				onSubmit={(e) => {
 					e.preventDefault();
-					handleCreateApp();
+					void handleCreateApp();
 				}}
 				className="flex min-h-[150px] flex-col rounded-[18px] border border-accent/30 bg-bg-4 p-5 shadow-textarea transition-all duration-200 dark:border-accent/50 dark:bg-bg-2"
 			>
@@ -187,7 +216,7 @@ export function CreateProjectPanel() {
 						onKeyDown={(e) => {
 							if (e.key === 'Enter' && !e.shiftKey) {
 								e.preventDefault();
-								handleCreateApp();
+								void handleCreateApp();
 							}
 						}}
 					/>
@@ -217,7 +246,7 @@ export function CreateProjectPanel() {
 						<ImageUploadButton onFilesSelected={addImages} disabled={isProcessing} />
 						<button
 							type="submit"
-							disabled={!query.trim()}
+							disabled={!query.trim() || isValidatingCredits}
 							className="rounded-md bg-accent p-1 text-white transition-all duration-200 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 [&>*]:size-5"
 						>
 							<ArrowRight />

@@ -279,6 +279,24 @@ export interface FrappeSettingsUrlData {
   url: string;
 }
 
+export interface UserCreditsData {
+  totalCredits: number;
+  dailyCredits: number;
+  monthlyCredits: number;
+  rolloverCredits: number;
+  topupCredits: number;
+  topupUrl: string;
+  reason?: string;
+  source: 'frappe' | 'fallback';
+}
+
+export interface CreditValidationData {
+  allowed: boolean;
+  reason?: string;
+  totalCredits?: number;
+  source: 'frappe' | 'fallback';
+}
+
 export interface CsrfTokenResponseData {
   token: string;
   headerName: string;

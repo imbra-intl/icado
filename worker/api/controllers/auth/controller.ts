@@ -27,6 +27,7 @@ import { CsrfService } from '../../../services/csrf/CsrfService';
 import { BaseController } from '../baseController';
 import { createLogger } from '../../../logger';
 import { FrappeOAuthProvider } from '../../../services/oauth/frappe';
+import { FrappeBridgeService, type CreditValidationAction } from '../../../services/frappe/FrappeBridgeService';
 /**
  * Authentication Controller
  */
@@ -57,6 +58,10 @@ export class AuthController extends BaseController {
 
     static hasFrappeOAuthProvider(env: Env): boolean {
         return FrappeOAuthProvider.isConfigured(env);
+    }
+
+    private static isValidCreditAction(value: unknown): value is CreditValidationAction {
+        return value === 'create_project' || value === 'chat_input';
     }
 
     /**
@@ -822,6 +827,79 @@ export class AuthController extends BaseController {
         } catch (error) {
             this.logger.error('Get settings URL error', error);
             return AuthController.createErrorResponse('Failed to get settings URL', 500);
+        }
+    }
+
+    /**
+     * Get current user credit summary from Frappe bridge.
+     * GET /api/auth/credits
+     */
+    static async getCreditsSummary(
+        request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        routeContext: RouteContext
+    ): Promise<Response> {
+        try {
+            const user = routeContext.user;
+            if (!user) {
+                return AuthController.createErrorResponse('Unauthorized', 401);
+            }
+
+            const frappeBridgeService = new FrappeBridgeService(env);
+            const summary = await frappeBridgeService.getCreditSummary(request, { user });
+            return AuthController.createSuccessResponse(summary);
+        } catch (error) {
+            this.logger.error('Get credits summary error', error);
+            return AuthController.createErrorResponse('Failed to get credit summary', 500);
+        }
+    }
+
+    /**
+     * Validate whether user has enough credits for an action.
+     * POST /api/auth/credits/validate
+     */
+    static async validateCredits(
+        request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        routeContext: RouteContext
+    ): Promise<Response> {
+        try {
+            const user = routeContext.user;
+            if (!user) {
+                return AuthController.createErrorResponse('Unauthorized', 401);
+            }
+
+            const bodyResult = await AuthController.parseJsonBody<{
+                action?: CreditValidationAction;
+                query?: string;
+                agentId?: string;
+            }>(request);
+            if (!bodyResult.success) {
+                return bodyResult.response!;
+            }
+
+            const action = bodyResult.data?.action;
+            if (!this.isValidCreditAction(action)) {
+                return AuthController.createErrorResponse(
+                    'Invalid action. Use "create_project" or "chat_input".',
+                    400,
+                );
+            }
+
+            const frappeBridgeService = new FrappeBridgeService(env);
+            const validationResult = await frappeBridgeService.validateCredits(request, {
+                user,
+                action,
+                query: bodyResult.data?.query,
+                agentId: bodyResult.data?.agentId,
+            });
+
+            return AuthController.createSuccessResponse(validationResult);
+        } catch (error) {
+            this.logger.error('Validate credits error', error);
+            return AuthController.createErrorResponse('Failed to validate credits', 500);
         }
     }
 }

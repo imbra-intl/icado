@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AuthButton } from '../auth/auth-button';
 import { ThemeToggle } from '../theme-toggle';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/auth-context';
-import { ChevronRight, AlertCircle } from 'lucide-react';
+import { ChevronRight, AlertCircle, Coins } from 'lucide-react';
 import { usePlatformStatus } from '@/hooks/use-platform-status';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Link, useLocation } from 'react-router';
 import clsx from 'clsx';
+import { apiClient } from '@/lib/api-client';
+import type { UserCreditsData } from '@/api-types';
 
 const BRAND_LOGO_URL = 'https://imbra.co.bw/assets/isaas/logo/imbra-icon.png';
 
@@ -19,12 +21,55 @@ export function GlobalHeader() {
 	const hasMaintenanceMessage = Boolean(status.hasActiveMessage && status.globalUserMessage.trim().length > 0);
 	const hasChangeLogs = Boolean(status.changeLogs && status.changeLogs.trim().length > 0);
 	const { pathname } = useLocation();
+	const [credits, setCredits] = useState<UserCreditsData | null>(null);
+	const [isCreditsLoading, setIsCreditsLoading] = useState(false);
+
+	const refreshCredits = useCallback(async () => {
+		if (!user) {
+			setCredits(null);
+			return;
+		}
+
+		try {
+			setIsCreditsLoading(true);
+			const response = await apiClient.getUserCredits();
+			if (response.success && response.data) {
+				setCredits(response.data);
+			}
+		} catch (error) {
+			console.warn('Failed to fetch credits:', error);
+		} finally {
+			setIsCreditsLoading(false);
+		}
+	}, [user]);
 
 	useEffect(() => {
 		if (!hasChangeLogs) {
 			setIsChangelogOpen(false);
 		}
 	}, [hasChangeLogs]);
+
+	useEffect(() => {
+		if (!user) {
+			setCredits(null);
+			return;
+		}
+
+		void refreshCredits();
+		const intervalId = window.setInterval(() => {
+			void refreshCredits();
+		}, 30000);
+		return () => {
+			window.clearInterval(intervalId);
+		};
+	}, [refreshCredits, user]);
+
+	const formattedCredits = (() => {
+		if (!credits) return '0';
+		const value = credits.totalCredits;
+		if (!Number.isFinite(value)) return '0';
+		return value.toFixed(value % 1 === 0 ? 0 : 2);
+	})();
 
 	return (
 		<Dialog open={isChangelogOpen} onOpenChange={setIsChangelogOpen}>
@@ -91,6 +136,22 @@ export function GlobalHeader() {
 							transition={{ delay: 0.2 }}
 							className="flex flex-wrap items-center justify-end gap-3 justify-self-end"
 						>
+							{user && (
+								<div className="flex items-center gap-2 rounded-full border border-accent/30 bg-bg-4/80 px-3 py-1.5 text-xs text-text-primary shadow-sm backdrop-blur">
+									<Coins className="h-3.5 w-3.5 text-accent" />
+									<span className="font-medium">
+										{isCreditsLoading ? 'Credits...' : `${formattedCredits} credits`}
+									</span>
+									{credits?.topupUrl && (
+										<a
+											href={credits.topupUrl}
+											className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white hover:bg-accent/90 transition-colors"
+										>
+											Top up
+										</a>
+									)}
+								</div>
+							)}
 							{/* Disable cost display for now */}
 							{/* {user && (
 							<CostDisplay

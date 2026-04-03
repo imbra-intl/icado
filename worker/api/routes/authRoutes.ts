@@ -28,6 +28,8 @@ export function setupAuthRoutes(app: Hono<AppEnv>): void {
     authRouter.put('/profile', setAuthLevel(AuthConfig.authenticated), adaptController(AuthController, AuthController.updateProfile));
     authRouter.post('/logout', setAuthLevel(AuthConfig.authenticated), adaptController(AuthController, AuthController.logout));
     authRouter.get('/frappe-settings-url', setAuthLevel(AuthConfig.authenticated), adaptController(AuthController, AuthController.getFrappeSettingsRedirectUrl));
+    authRouter.get('/credits', setAuthLevel(AuthConfig.authenticated), adaptController(AuthController, AuthController.getCreditsSummary));
+    authRouter.post('/credits/validate', setAuthLevel(AuthConfig.authenticated), adaptController(AuthController, AuthController.validateCredits));
 
     // Session management routes
     authRouter.get('/sessions', setAuthLevel(AuthConfig.authenticated), adaptController(AuthController, AuthController.getActiveSessions));

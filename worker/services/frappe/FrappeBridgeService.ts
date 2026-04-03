@@ -16,6 +16,37 @@ interface NormalizedAccessResult {
 	reason?: string;
 }
 
+export type CreditValidationAction = 'create_project' | 'chat_input';
+
+export interface FrappeCreditValidationInput {
+	user: AuthUser;
+	action: CreditValidationAction;
+	query?: string;
+	agentId?: string;
+}
+
+export interface FrappeCreditValidationResult {
+	allowed: boolean;
+	reason?: string;
+	totalCredits?: number;
+	source: 'frappe' | 'fallback';
+}
+
+export interface FrappeCreditSummaryInput {
+	user: AuthUser;
+}
+
+export interface FrappeCreditSummaryResult {
+	totalCredits: number;
+	dailyCredits: number;
+	monthlyCredits: number;
+	rolloverCredits: number;
+	topupCredits: number;
+	topupUrl: string;
+	reason?: string;
+	source: 'frappe' | 'fallback';
+}
+
 export interface FrappeProjectValidationInput {
 	user: AuthUser;
 	query: string;
@@ -82,6 +113,27 @@ function readBoolean(record: JsonRecord, keys: string[]): boolean | undefined {
 	return undefined;
 }
 
+function readNumber(record: JsonRecord, keys: string[]): number | undefined {
+	for (const key of keys) {
+		const value = record[key];
+		if (typeof value === 'number' && Number.isFinite(value)) {
+			return value;
+		}
+		if (typeof value === 'string') {
+			const trimmed = value.trim();
+			if (trimmed.length === 0) {
+				continue;
+			}
+			const parsed = Number(trimmed);
+			if (Number.isFinite(parsed)) {
+				return parsed;
+			}
+		}
+	}
+
+	return undefined;
+}
+
 export class FrappeBridgeService {
 	private readonly logger = createLogger('FrappeBridgeService');
 
@@ -95,6 +147,10 @@ export class FrappeBridgeService {
 
 		const trimmed = envValue.trim();
 		return trimmed.length > 0 ? trimmed : undefined;
+	}
+
+	private getFrappeBaseUrl(): string | undefined {
+		return this.getEnvString('FRAPPE_BASE_URL') || this.getEnvString('FRAPPE_OAUTH_BASE_URL');
 	}
 
 	private getEnvBoolean(key: string, defaultValue: boolean): boolean {
@@ -138,11 +194,11 @@ export class FrappeBridgeService {
 			if (configured.startsWith('https://') || configured.startsWith('http://')) {
 				return configured;
 			}
-			const baseUrl = this.getEnvString('FRAPPE_BASE_URL');
+			const baseUrl = this.getFrappeBaseUrl();
 			return baseUrl ? this.toAbsoluteUrl(baseUrl, configured) : null;
 		}
 
-		const baseUrl = this.getEnvString('FRAPPE_BASE_URL');
+		const baseUrl = this.getFrappeBaseUrl();
 		if (!baseUrl) {
 			return null;
 		}
@@ -225,6 +281,127 @@ export class FrappeBridgeService {
 			allowed,
 			reason,
 		};
+	}
+
+	private getFrappeTopupUrl(): string {
+		const configured = this.getEnvString('FRAPPE_CREDITS_TOPUP_URL');
+		if (configured) {
+			if (configured.startsWith('http://') || configured.startsWith('https://')) {
+				return configured;
+			}
+			const baseUrl = this.getFrappeBaseUrl();
+			if (baseUrl) {
+				return this.toAbsoluteUrl(baseUrl, configured);
+			}
+		}
+
+		const baseUrl = this.getFrappeBaseUrl();
+		if (!baseUrl) {
+			return '/';
+		}
+		return this.toAbsoluteUrl(baseUrl, '/ipanel/icado');
+	}
+
+	private collectPayloadRecords(payload: unknown): JsonRecord[] {
+		if (!isRecord(payload)) {
+			return [];
+		}
+
+		const records: JsonRecord[] = [payload];
+		const nestedKeys = ['account', 'summary', 'credits', 'balances', 'data'];
+		for (const key of nestedKeys) {
+			const nested = payload[key];
+			if (isRecord(nested)) {
+				records.push(nested);
+			}
+		}
+
+		return records;
+	}
+
+	private parseCreditSummary(
+		data: unknown,
+		source: 'frappe' | 'fallback',
+		reason?: string,
+	): FrappeCreditSummaryResult {
+		const payload = this.unwrapMessagePayload(data);
+		const records = this.collectPayloadRecords(payload);
+
+		const pickNumber = (keys: string[]): number | undefined => {
+			for (const record of records) {
+				const value = readNumber(record, keys);
+				if (value !== undefined) {
+					return value;
+				}
+			}
+			return undefined;
+		};
+
+		const pickString = (keys: string[]): string | undefined => {
+			for (const record of records) {
+				const value = readString(record, keys);
+				if (value !== undefined) {
+					return value;
+				}
+			}
+			return undefined;
+		};
+
+		const dailyCredits = pickNumber([
+			'daily_credits_balance',
+			'daily_credits',
+			'dailyCredits',
+			'daily_balance',
+		]) ?? 0;
+		const monthlyCredits = pickNumber([
+			'monthly_credits_balance',
+			'monthly_credits',
+			'monthlyCredits',
+			'monthly_balance',
+		]) ?? 0;
+		const rolloverCredits = pickNumber([
+			'rollover_credits_balance',
+			'rollover_credits',
+			'rolloverCredits',
+			'rollover_balance',
+		]) ?? 0;
+		const topupCredits = pickNumber([
+			'topup_credits_balance',
+			'topup_credits',
+			'topupCredits',
+			'topup_balance',
+			'top_up_credits_balance',
+		]) ?? 0;
+
+		const parsedTotalCredits = pickNumber([
+			'total_credits',
+			'totalCredits',
+			'credits_balance',
+			'current_credits',
+			'available_credits',
+			'balance',
+		]);
+		const totalCredits =
+			parsedTotalCredits ?? dailyCredits + monthlyCredits + rolloverCredits + topupCredits;
+
+		const configuredTopupUrl =
+			pickString(['topup_url', 'topupUrl', 'top_up_url']) || this.getFrappeTopupUrl();
+
+		return {
+			totalCredits,
+			dailyCredits,
+			monthlyCredits,
+			rolloverCredits,
+			topupCredits,
+			topupUrl: configuredTopupUrl,
+			reason,
+			source,
+		};
+	}
+
+	private extractTotalCredits(data: unknown): number | undefined {
+		const summary = this.parseCreditSummary(data, 'frappe');
+		return Number.isFinite(summary.totalCredits) ? summary.totalCredits : undefined;
 	}
 
 	private async postJson(request: Request, endpoint: string, payload: unknown): Promise<FrappeCallResult> {
@@ -375,5 +552,98 @@ export class FrappeBridgeService {
 		}
 
 		return true;
+	}
+
+	async validateCredits(
+		request: Request,
+		input: FrappeCreditValidationInput,
+	): Promise<FrappeCreditValidationResult> {
+		const strictValidation = this.getEnvBoolean('FRAPPE_STRICT_CREDIT_VALIDATION', false);
+		const endpoint = this.resolveEndpoint(
+			'FRAPPE_CREDITS_VALIDATE_URL',
+			'/api/method/isaas.api.icado.validate_user_credits',
+		);
+
+		if (!endpoint) {
+			return {
+				allowed: true,
+				source: 'fallback',
+			};
+		}
+
+		const payload = {
+			user_id: input.user.id,
+			email: input.user.email,
+			action: input.action,
+			query: input.query,
+			agent_id: input.agentId,
+			source: 'icado',
+		};
+
+		const callResult = await this.postJson(request, endpoint, payload);
+		if (!callResult.ok) {
+			const reason = callResult.errorMessage || 'Frappe credit validation failed';
+			if (strictValidation) {
+				return {
+					allowed: false,
+					reason,
+					source: 'frappe',
+				};
+			}
+
+			this.logger.warn('Frappe credit validation unavailable, allowing by fallback policy', {
+				reason,
+				status: callResult.status,
+				action: input.action,
+			});
+			return {
+				allowed: true,
+				reason,
+				source: 'fallback',
+			};
+		}
+
+		const normalized = this.normalizeAccessResult(callResult.data, true);
+		return {
+			allowed: normalized.allowed,
+			reason: normalized.reason,
+			totalCredits: this.extractTotalCredits(callResult.data),
+			source: 'frappe',
+		};
+	}
+
+	async getCreditSummary(
+		request: Request,
+		input: FrappeCreditSummaryInput,
+	): Promise<FrappeCreditSummaryResult> {
+		const endpoint = this.resolveEndpoint(
+			'FRAPPE_CREDITS_SUMMARY_URL',
+			'/api/method/isaas.api.icado.get_user_credit_summary',
+		);
+
+		if (!endpoint) {
+			return this.parseCreditSummary(
+				{},
+				'fallback',
+				'Frappe credit summary endpoint is not configured',
+			);
+		}
+
+		const payload = {
+			user_id: input.user.id,
+			email: input.user.email,
+			source: 'icado',
+		};
+
+		const callResult = await this.postJson(request, endpoint, payload);
+		if (!callResult.ok) {
+			return this.parseCreditSummary(
+				{},
+				'fallback',
+				callResult.errorMessage || 'Failed to fetch credit summary from Frappe',
+			);
+		}
+
+		return this.parseCreditSummary(callResult.data, 'frappe');
 	}
 }

@@ -49,6 +49,8 @@ import type{
 	ProfileResponseData,
 	AuthProvidersResponseData,
 	FrappeSettingsUrlData,
+	UserCreditsData,
+	CreditValidationData,
 	CsrfTokenResponseData,
 	OAuthProvider,
 	CodeGenArgs,
@@ -1181,6 +1183,27 @@ class ApiClient {
 	 */
 	async getFrappeSettingsUrl(): Promise<ApiResponse<FrappeSettingsUrlData>> {
 		return this.request<FrappeSettingsUrlData>('/api/auth/frappe-settings-url');
+	}
+
+	/**
+	 * Get current authenticated user's credit summary.
+	 */
+	async getUserCredits(): Promise<ApiResponse<UserCreditsData>> {
+		return this.request<UserCreditsData>('/api/auth/credits');
+	}
+
+	/**
+	 * Validate credits for a specific action before performing it.
+	 */
+	async validateCredits(data: {
+		action: 'create_project' | 'chat_input';
+		query?: string;
+		agentId?: string;
+	}): Promise<ApiResponse<CreditValidationData>> {
+		return this.request<CreditValidationData>('/api/auth/credits/validate', {
+			method: 'POST',
+			body: data,
+		});
 	}
 
 	/**
