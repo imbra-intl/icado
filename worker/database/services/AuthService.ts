@@ -325,8 +325,9 @@ export class AuthService extends BaseService {
         // Generate state for CSRF protection
         const state = generateSecureToken();
         
-        // Generate PKCE code verifier
-        const codeVerifier = BaseOAuthProvider.generateCodeVerifier();
+        // Frappe OAuth servers may not support PKCE consistently; keep flow compatible.
+        const usePkce = provider !== 'frappe';
+        const codeVerifier = usePkce ? BaseOAuthProvider.generateCodeVerifier() : null;
         
         // Store OAuth state with intended redirect URL
         await this.database.insert(schema.oauthStates).values({
@@ -344,7 +345,7 @@ export class AuthService extends BaseService {
         });
         
         // Get authorization URL
-        const authUrl = await oauthProvider.getAuthorizationUrl(state, codeVerifier);
+        const authUrl = await oauthProvider.getAuthorizationUrl(state, codeVerifier || undefined);
         
         logger.info('OAuth authorization initiated', { provider });
         
