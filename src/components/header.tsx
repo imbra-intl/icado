@@ -1,7 +1,8 @@
 import React from 'react';
 import clsx from 'clsx';
-import { CloudflareLogo } from './icons/logos';
 import { Link } from 'react-router';
+
+const BRAND_LOGO_URL = 'https://imbra.co.bw/assets/isaas/logo/imbra-icon.png';
 
 export function Header({
 	className,
@@ -15,10 +16,11 @@ export function Header({
 			)}
 		>
 			<h1 className="flex items-center gap-2 mx-4">
-				<Link to="/">
-					<CloudflareLogo
-						className="h-4 text-bg-bright-dim"
-						aria-label="Cloudflare v1"
+				<Link to="/" aria-label="Go to home">
+					<img
+						src={BRAND_LOGO_URL}
+						alt="Imbra"
+						className="h-6 w-6 rounded-sm object-contain"
 					/>
 				</Link>
 			</h1>
