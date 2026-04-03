@@ -415,7 +415,7 @@ export const AppCard = React.memo<AppCardProps>(
 			>
 				{/* Anchor wrapper for right-click context menu support */}
 				<a
-					href={`/app/${app.id}`}
+					href={`/chat/${app.id}`}
 					onClick={(e) => {
 						e.preventDefault();
 						onClick(app.id);

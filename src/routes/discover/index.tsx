@@ -4,6 +4,7 @@ import { usePaginatedApps } from '@/hooks/use-paginated-apps';
 import { AppListContainer } from '@/components/shared/AppListContainer';
 import { AppFiltersForm } from '@/components/shared/AppFiltersForm';
 import { AppSortTabs } from '@/components/shared/AppSortTabs';
+import { CreateProjectPanel } from '@/components/create-project-panel';
 import type { AppSortOption } from '@/api-types';
 
 export default function DiscoverPage() {
@@ -70,6 +71,8 @@ export default function DiscoverPage() {
 						</p>
 					</div>
 
+					<CreateProjectPanel />
+
 					<div className="flex items-start gap-4 justify-between">
 						{/* Search and Filters */}
 						<AppFiltersForm
@@ -111,7 +114,7 @@ export default function DiscoverPage() {
 						hasMore={hasMore}
 						totalCount={totalCount}
 						sortBy={sortBy}
-						onAppClick={(appId) => navigate(`/app/${appId}`)}
+						onAppClick={(appId) => navigate(`/app/${appId}?source=discover`)}
 						onLoadMore={loadMore}
 						onRetry={refetch}
 						showUser={true}

@@ -296,7 +296,7 @@ export default function Profile() {
                       <div 
                         key={app.id}
                         className="flex items-center justify-between p-4 rounded-lg border hover:bg-bg-3/50 transition-colors cursor-pointer"
-                        onClick={() => navigate(`/app/${app.id}`)}
+                        onClick={() => navigate(`/chat/${app.id}`)}
                       >
                         <div className="flex items-center gap-4">
                           <div className="h-12 w-12 rounded-lg bg-bg-3 flex items-center justify-center">

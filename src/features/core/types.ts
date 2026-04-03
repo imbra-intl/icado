@@ -71,6 +71,10 @@ export interface HeaderActionsProps extends FeatureContext {
 	onGitHubExportClick: () => void;
 	loadingConfigs: boolean;
 	onRequestConfigs: () => void;
+	visibility?: 'private' | 'team' | 'board' | 'public';
+	canToggleVisibility?: boolean;
+	isUpdatingVisibility?: boolean;
+	onToggleVisibility?: () => void;
 }
 
 /**

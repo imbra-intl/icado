@@ -137,7 +137,7 @@ export default function AppsPage() {
 						hasMore={hasMore}
 						totalCount={totalCount}
 						sortBy={sortBy}
-						onAppClick={(appId) => navigate(`/app/${appId}`)}
+						onAppClick={(appId) => navigate(`/chat/${appId}`)}
 						onToggleFavorite={handleToggleFavorite}
 						onLoadMore={loadMore}
 						onRetry={refetch}

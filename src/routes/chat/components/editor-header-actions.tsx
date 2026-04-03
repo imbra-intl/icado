@@ -10,6 +10,10 @@ interface EditorHeaderActionsProps {
 	isGitHubExportReady: boolean;
 	onGitHubExportClick: () => void;
 	editorRef: RefObject<HTMLDivElement | null>;
+	visibility?: 'private' | 'team' | 'board' | 'public';
+	canToggleVisibility?: boolean;
+	isUpdatingVisibility?: boolean;
+	onToggleVisibility?: () => void;
 }
 
 export function EditorHeaderActions({
@@ -20,6 +24,10 @@ export function EditorHeaderActions({
 	isGitHubExportReady,
 	onGitHubExportClick,
 	editorRef,
+	visibility,
+	canToggleVisibility,
+	isUpdatingVisibility,
+	onToggleVisibility,
 }: EditorHeaderActionsProps) {
 	return (
 		<BaseHeaderActions
@@ -30,6 +38,11 @@ export function EditorHeaderActions({
 			onGitCloneClick={onGitCloneClick}
 			isGitHubExportReady={isGitHubExportReady}
 			onGitHubExportClick={onGitHubExportClick}
+			showModelInfo={false}
+			visibility={visibility}
+			canToggleVisibility={canToggleVisibility}
+			isUpdatingVisibility={isUpdatingVisibility}
+			onToggleVisibility={onToggleVisibility}
 		/>
 	);
 }

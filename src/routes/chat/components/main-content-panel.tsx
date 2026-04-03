@@ -2,7 +2,7 @@ import { type RefObject, type ReactNode, Suspense, useState, useCallback } from 
 import { WebSocket } from 'partysocket';
 import { MonacoEditor } from '../../../components/monaco-editor/monaco-editor';
 import { motion } from 'framer-motion';
-import { RefreshCw } from 'lucide-react';
+import { ExternalLink, RefreshCw } from 'lucide-react';
 import { Blueprint } from './blueprint';
 import { FileExplorer } from './file-explorer';
 import { PreviewIframe } from './preview-iframe';
@@ -11,7 +11,6 @@ import { ViewContainer } from './view-container';
 import { ViewHeader } from './view-header';
 import { PreviewHeaderActions } from './preview-header-actions';
 import { EditorHeaderActions } from './editor-header-actions';
-import { Copy } from './copy';
 import { featureRegistry } from '@/features';
 import type { FileType, BlueprintType, BehaviorType, ModelConfigsInfo, TemplateDetails, ProjectType } from '@/api-types';
 import type { ContentDetectionResult } from '../utils/content-detector';
@@ -53,6 +52,10 @@ interface MainContentPanelProps {
 	modelConfigs?: ModelConfigsInfo;
 	loadingConfigs: boolean;
 	onRequestConfigs: () => void;
+	visibility?: 'private' | 'team' | 'board' | 'public';
+	canToggleVisibility?: boolean;
+	isUpdatingVisibility?: boolean;
+	onToggleVisibility?: () => void;
 
 	// Git/GitHub actions
 	onGitCloneClick: () => void;
@@ -94,6 +97,10 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		modelConfigs,
 		loadingConfigs,
 		onRequestConfigs,
+		visibility,
+		canToggleVisibility,
+		isUpdatingVisibility,
+		onToggleVisibility,
 		onGitCloneClick,
 		isGitHubExportReady,
 		githubExport,
@@ -109,6 +116,10 @@ export function MainContentPanel(props: MainContentPanelProps) {
 	const setFeatureState = useCallback((key: string, value: unknown) => {
 		setFeatureStateInternal(prev => ({ ...prev, [key]: value }));
 	}, []);
+	const openPreviewInNewTab = useCallback(() => {
+		if (!previewUrl) return;
+		window.open(previewUrl, '_blank', 'noopener,noreferrer');
+	}, [previewUrl]);
 
 	const commonHeaderProps = {
 		view: view as 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation',
@@ -244,6 +255,10 @@ export function MainContentPanel(props: MainContentPanelProps) {
 					onGitHubExportClick={githubExport.openModal}
 					loadingConfigs={loadingConfigs}
 					onRequestConfigs={onRequestConfigs}
+					visibility={visibility}
+					canToggleVisibility={canToggleVisibility}
+					isUpdatingVisibility={isUpdatingVisibility}
+					onToggleVisibility={onToggleVisibility}
 				/>
 			</Suspense>
 		) : (
@@ -255,6 +270,10 @@ export function MainContentPanel(props: MainContentPanelProps) {
 				isGitHubExportReady={isGitHubExportReady}
 				onGitHubExportClick={githubExport.openModal}
 				previewRef={previewRef}
+				visibility={visibility}
+				canToggleVisibility={canToggleVisibility}
+				isUpdatingVisibility={isUpdatingVisibility}
+				onToggleVisibility={onToggleVisibility}
 			/>
 		);
 
@@ -263,7 +282,13 @@ export function MainContentPanel(props: MainContentPanelProps) {
 				<span className="text-sm font-mono text-text-50/70">
 					{previewTitle}
 				</span>
-				<Copy text={previewUrl} />
+				<button
+					className="p-1 hover:bg-bg-2 rounded transition-colors"
+					onClick={openPreviewInNewTab}
+					title="Open preview in new tab"
+				>
+					<ExternalLink className="size-4 text-text-primary/50" />
+				</button>
 				{showManualRefresh && (
 					<button
 						className="p-1 hover:bg-bg-2 rounded transition-colors"
@@ -283,7 +308,15 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		renderViewWithHeader(
 			<div className="flex items-center gap-2">
 				<span className="text-sm text-text-50/70 font-mono">Blueprint.md</span>
-				{previewUrl && <Copy text={previewUrl} />}
+				{previewUrl && (
+					<button
+						className="p-1 hover:bg-bg-2 rounded transition-colors"
+						onClick={openPreviewInNewTab}
+						title="Open preview in new tab"
+					>
+						<ExternalLink className="size-4 text-text-primary/50" />
+					</button>
+				)}
 			</div>,
 			<div className="flex-1 overflow-y-auto bg-bg-3">
 				<div className="py-12 mx-auto">
@@ -322,6 +355,10 @@ export function MainContentPanel(props: MainContentPanelProps) {
 					isGitHubExportReady={isGitHubExportReady}
 					onGitHubExportClick={githubExport.openModal}
 					editorRef={editorRef}
+					visibility={visibility}
+					canToggleVisibility={canToggleVisibility}
+					isUpdatingVisibility={isUpdatingVisibility}
+					onToggleVisibility={onToggleVisibility}
 				/>
 			);
 		}
@@ -329,7 +366,15 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		return renderViewWithHeader(
 			<div className="flex items-center gap-2">
 				<span className="text-sm font-mono text-text-50/70">{activeFile.filePath}</span>
-				{previewUrl && <Copy text={previewUrl} />}
+				{previewUrl && (
+					<button
+						className="p-1 hover:bg-bg-2 rounded transition-colors"
+						onClick={openPreviewInNewTab}
+						title="Open preview in new tab"
+					>
+						<ExternalLink className="size-4 text-text-primary/50" />
+					</button>
+				)}
 			</div>,
 			<div className="flex-1 relative">
 				<div className="absolute inset-0 flex" ref={editorRef}>
@@ -366,6 +411,10 @@ export function MainContentPanel(props: MainContentPanelProps) {
 				isGitHubExportReady={isGitHubExportReady}
 				onGitHubExportClick={githubExport.openModal}
 				editorRef={editorRef}
+				visibility={visibility}
+				canToggleVisibility={canToggleVisibility}
+				isUpdatingVisibility={isUpdatingVisibility}
+				onToggleVisibility={onToggleVisibility}
 			/>
 		);
 	};

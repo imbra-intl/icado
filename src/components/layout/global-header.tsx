@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import { AuthButton } from '../auth/auth-button';
 import { ThemeToggle } from '../theme-toggle';
 import { motion } from 'framer-motion';
@@ -52,13 +51,18 @@ export function GlobalHeader() {
 								}}
 								className='flex items-center'
 							>
-								<SidebarTrigger className="h-8 w-8 text-text-primary rounded-md hover:bg-accent/10 transition-colors duration-200" />
-								<Link to="/" aria-label="Go to home" className="ml-2 flex items-center">
+								<Link to="/" aria-label="Go to home" className="flex items-center">
 									<img
 										src={BRAND_LOGO_URL}
 										alt="Imbra"
 										className="h-7 w-7 flex-shrink-0 rounded-sm object-contain transition-all duration-300"
 									/>
+								</Link>
+								<Link
+									to="/discover"
+									className="ml-4 text-sm font-medium text-text-primary/80 hover:text-text-primary transition-colors"
+								>
+									Discover
 								</Link>
 								{hasMaintenanceMessage && (
 									<button

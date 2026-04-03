@@ -83,6 +83,7 @@ export default function AppView() {
 	const { id } = useParams();
 	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
+	const isDiscoverPreviewMode = searchParams.get('source') === 'discover';
 	const { user } = useAuth();
 	const { requireAuth } = useAuthGuard();
 	const [app, setApp] = useState<AppDetails | null>(null);
@@ -102,6 +103,7 @@ export default function AppView() {
 	const [isGitCloneModalOpen, setIsGitCloneModalOpen] = useState(false);
 	const [activeFilePath, setActiveFilePath] = useState<string>();
 	const previewIframeRef = useRef<HTMLIFrameElement>(null);
+	const autoDeployAttemptedRef = useRef(false);
 
 	const fetchAppDetails = useCallback(async () => {
 		if (!id) return;
@@ -383,7 +385,7 @@ export default function AppView() {
 		return app?.cloudflareUrl || app?.previewUrl || '';
 	};
 
-	const handlePreviewDeploy = async () => {
+	const handlePreviewDeploy = useCallback(async () => {
 		if (!app || isDeploying) return;
 
 		try {
@@ -416,7 +418,7 @@ export default function AppView() {
 			setIsDeploying(false);
 			toast.error('Failed to start deployment');
 		}
-	};
+	}, [app, isDeploying]);
 
 	const handleToggleVisibility = async () => {
 		if (!app || !user || !isOwner) {
@@ -493,6 +495,26 @@ export default function AppView() {
 		}
 	};
 
+	const appUrl = getAppUrl();
+
+	useEffect(() => {
+		if (!isDiscoverPreviewMode) return;
+		if (activeTab !== 'preview') {
+			setActiveTab('preview');
+		}
+	}, [activeTab, isDiscoverPreviewMode]);
+
+	useEffect(() => {
+		autoDeployAttemptedRef.current = false;
+	}, [app?.id, isDiscoverPreviewMode]);
+
+	useEffect(() => {
+		if (!isDiscoverPreviewMode || !app) return;
+		if (appUrl || isDeploying || autoDeployAttemptedRef.current) return;
+		autoDeployAttemptedRef.current = true;
+		void handlePreviewDeploy();
+	}, [app, appUrl, handlePreviewDeploy, isDeploying, isDiscoverPreviewMode]);
+
 	if (loading) {
 		return (
 			<div className="min-h-screen bg-bg-3 flex items-center justify-center">
@@ -529,7 +551,6 @@ export default function AppView() {
 	}
 
 	const isOwner = app.userId === user?.id;
-	const appUrl = getAppUrl();
 	const createdDate = app.createdAt ? new Date(app.createdAt) : new Date();
 
 	return (
@@ -612,15 +633,17 @@ export default function AppView() {
 								</Button>
 
 								{/* Git Clone Button */}
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={() => setIsGitCloneModalOpen(true)}
-									className="gap-2 text-text-primary"
-								>
-									<GitBranch className="h-4 w-4" />
-									Git Clone
-								</Button>
+								{!isDiscoverPreviewMode && (
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={() => setIsGitCloneModalOpen(true)}
+										className="gap-2 text-text-primary"
+									>
+										<GitBranch className="h-4 w-4" />
+										Git Clone
+									</Button>
+								)}
 
 								{/* GitHub Repository Button */}
 								{app.githubRepositoryUrl && (
@@ -735,8 +758,8 @@ export default function AppView() {
 					<div className="flex items-center gap-4">
 						{/* Using proper TabsList and TabsTrigger components */}
 						<TabsList className="inline-flex h-auto w-fit items-center gap-0.5 bg-bg-2 dark:bg-bg-1 rounded-md p-0.5 border border-border-primary/30">
-						<TabsTrigger 
-							value="preview" 
+						<TabsTrigger
+							value="preview"
 							className="px-3 py-1.5 rounded text-xs font-medium data-[state=active]:bg-bg-4 dark:data-[state=active]:bg-bg-3 data-[state=active]:text-text-primary data-[state=active]:shadow-sm"
 						>
 							<Eye className={cn(
@@ -745,41 +768,47 @@ export default function AppView() {
 							)} />
 							Preview
 						</TabsTrigger>
-						<TabsTrigger 
-							value="code" 
-							className="px-3 py-1.5 rounded text-xs font-medium data-[state=active]:bg-bg-4 dark:data-[state=active]:bg-bg-3 data-[state=active]:text-text-primary data-[state=active]:shadow-sm"
-						>
-							<Code2 className={cn(
-								"h-3.5 w-3.5 mr-1.5",
-								activeTab === 'code' ? 'text-accent' : 'text-accent/60'
-							)} />
-							Code
-						</TabsTrigger>
-						<TabsTrigger 
-							value="prompt" 
-							className="px-3 py-1.5 rounded text-xs font-medium data-[state=active]:bg-bg-4 dark:data-[state=active]:bg-bg-3 data-[state=active]:text-text-primary data-[state=active]:shadow-sm"
-						>
-							<MessageSquare className={cn(
-								"h-3.5 w-3.5 mr-1.5",
-								activeTab === 'prompt' ? 'text-accent' : 'text-accent/60'
-							)} />
-							Prompt
-						</TabsTrigger>
+						{!isDiscoverPreviewMode && (
+							<>
+								<TabsTrigger
+									value="code"
+									className="px-3 py-1.5 rounded text-xs font-medium data-[state=active]:bg-bg-4 dark:data-[state=active]:bg-bg-3 data-[state=active]:text-text-primary data-[state=active]:shadow-sm"
+								>
+									<Code2 className={cn(
+										"h-3.5 w-3.5 mr-1.5",
+										activeTab === 'code' ? 'text-accent' : 'text-accent/60'
+									)} />
+									Code
+								</TabsTrigger>
+								<TabsTrigger
+									value="prompt"
+									className="px-3 py-1.5 rounded text-xs font-medium data-[state=active]:bg-bg-4 dark:data-[state=active]:bg-bg-3 data-[state=active]:text-text-primary data-[state=active]:shadow-sm"
+								>
+									<MessageSquare className={cn(
+										"h-3.5 w-3.5 mr-1.5",
+										activeTab === 'prompt' ? 'text-accent' : 'text-accent/60'
+									)} />
+									Prompt
+								</TabsTrigger>
+							</>
+						)}
 						</TabsList>
 						
 						{/* Git Clone - Inline with tabs */}
-						<div className="flex-shrink-0">
-							{app.visibility === 'public' ? (
-								<GitCloneCommand
-									cloneUrl={`${window.location.protocol}//${window.location.host}/apps/${app.id}.git`}
-									appTitle={app.title}
-								/>
-							) : isOwner ? (
-								<GitClonePrivatePrompt
-									onOpenModal={() => setIsGitCloneModalOpen(true)}
-								/>
-							) : null}
-						</div>
+						{!isDiscoverPreviewMode && (
+							<div className="flex-shrink-0">
+								{app.visibility === 'public' ? (
+									<GitCloneCommand
+										cloneUrl={`${window.location.protocol}//${window.location.host}/apps/${app.id}.git`}
+										appTitle={app.title}
+									/>
+								) : isOwner ? (
+									<GitClonePrivatePrompt
+										onOpenModal={() => setIsGitCloneModalOpen(true)}
+									/>
+								) : null}
+							</div>
+						)}
 					</div>
 
 					<TabsContent value="preview" className="flex-1">
@@ -896,6 +925,7 @@ export default function AppView() {
 						</Card>
 					</TabsContent>
 
+					{!isDiscoverPreviewMode && (
 					<TabsContent value="code" className="flex-1">
 						<Card className="flex flex-col" style={{ maxHeight: '600px' }}>
 							<CardHeader>
@@ -1025,7 +1055,9 @@ export default function AppView() {
 							</CardContent>
 						</Card>
 					</TabsContent>
+					)}
 
+					{!isDiscoverPreviewMode && (
 					<TabsContent
 						value="prompt"
 						className="flex-1"
@@ -1087,6 +1119,7 @@ export default function AppView() {
 							</CardContent>
 						</Card>
 					</TabsContent>
+					)}
 				</Tabs>
 			</div>
 
@@ -1100,14 +1133,16 @@ export default function AppView() {
 			/>
 
 			{/* Git Clone Modal */}
-			<GitCloneModal
-				open={isGitCloneModalOpen}
-				onOpenChange={setIsGitCloneModalOpen}
-				appId={app.id}
-				appTitle={app.title}
-				isPublic={app.visibility === 'public'}
-				isOwner={isOwner}
-			/>
+			{!isDiscoverPreviewMode && (
+				<GitCloneModal
+					open={isGitCloneModalOpen}
+					onOpenChange={setIsGitCloneModalOpen}
+					appId={app.id}
+					appTitle={app.title}
+					isPublic={app.visibility === 'public'}
+					isOwner={isOwner}
+				/>
+			)}
 		</div>
 	);
 }

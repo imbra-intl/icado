@@ -95,7 +95,7 @@ function AppMenuItem({
 				className="cursor-pointer transition-opacity hover:opacity-75 pr-0"
 			>
 				<a
-					href={`/app/${app.id}`}
+					href={`/chat/${app.id}`}
 					onClick={(e) => {
 						e.preventDefault();
 						onClick(app.id);
@@ -313,7 +313,7 @@ export function AppSidebar() {
 																			id,
 																		) =>
 																			navigate(
-																				`/app/${id}`,
+																				`/chat/${id}`,
 																			)
 																		}
 																		variant="recent"
@@ -354,7 +354,7 @@ export function AppSidebar() {
 															app={app}
 															onClick={(id) =>
 																navigate(
-																	`/app/${id}`,
+																	`/chat/${id}`,
 																)
 															}
 															variant="recent"
@@ -419,7 +419,7 @@ export function AppSidebar() {
 														app={app}
 														onClick={(id) =>
 															navigate(
-																`/app/${id}`,
+																`/chat/${id}`,
 															)
 														}
 														showActions={true}

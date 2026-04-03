@@ -10,6 +10,10 @@ interface PreviewHeaderActionsProps {
 	isGitHubExportReady: boolean;
 	onGitHubExportClick: () => void;
 	previewRef: RefObject<HTMLIFrameElement | null>;
+	visibility?: 'private' | 'team' | 'board' | 'public';
+	canToggleVisibility?: boolean;
+	isUpdatingVisibility?: boolean;
+	onToggleVisibility?: () => void;
 }
 
 export function PreviewHeaderActions({
@@ -20,6 +24,10 @@ export function PreviewHeaderActions({
 	isGitHubExportReady,
 	onGitHubExportClick,
 	previewRef,
+	visibility,
+	canToggleVisibility,
+	isUpdatingVisibility,
+	onToggleVisibility,
 }: PreviewHeaderActionsProps) {
 	return (
 		<BaseHeaderActions
@@ -30,6 +38,11 @@ export function PreviewHeaderActions({
 			onGitCloneClick={onGitCloneClick}
 			isGitHubExportReady={isGitHubExportReady}
 			onGitHubExportClick={onGitHubExportClick}
+			showModelInfo={false}
+			visibility={visibility}
+			canToggleVisibility={canToggleVisibility}
+			isUpdatingVisibility={isUpdatingVisibility}
+			onToggleVisibility={onToggleVisibility}
 		/>
 	);
 }

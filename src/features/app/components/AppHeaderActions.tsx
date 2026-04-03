@@ -9,6 +9,10 @@ export function AppHeaderActions({
 	isGitHubExportReady,
 	onGitHubExportClick,
 	previewRef,
+	visibility,
+	canToggleVisibility,
+	isUpdatingVisibility,
+	onToggleVisibility,
 }: HeaderActionsProps) {
 	return (
 		<BaseHeaderActions
@@ -19,6 +23,11 @@ export function AppHeaderActions({
 			onGitCloneClick={onGitCloneClick}
 			isGitHubExportReady={isGitHubExportReady}
 			onGitHubExportClick={onGitHubExportClick}
+			showModelInfo={false}
+			visibility={visibility}
+			canToggleVisibility={canToggleVisibility}
+			isUpdatingVisibility={isUpdatingVisibility}
+			onToggleVisibility={onToggleVisibility}
 		/>
 	);
 }
