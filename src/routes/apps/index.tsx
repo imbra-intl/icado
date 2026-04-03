@@ -6,6 +6,7 @@ import { AppListContainer } from '@/components/shared/AppListContainer';
 import { AppFiltersForm } from '@/components/shared/AppFiltersForm';
 import { AppSortTabs } from '@/components/shared/AppSortTabs';
 import { VisibilityFilter } from '@/components/shared/VisibilityFilter';
+import { CreateProjectPanel } from '@/components/create-project-panel';
 import type { AppSortOption } from '@/api-types';
 
 export default function AppsPage() {
@@ -73,7 +74,7 @@ export default function AppsPage() {
 				>
 					{/* Header */}
 					<div className="mb-8">
-						<h1 className="text-6xl font-bold mb-3 font-[departureMono] text-accent">
+						<h1 className="text-6xl font-bold mb-3 text-accent">
 							MY APPS
 						</h1>
 						<p className="text-text-tertiary text-lg">
@@ -82,6 +83,8 @@ export default function AppsPage() {
 								: `${totalCount} app${totalCount !== 1 ? 's' : ''} in your workspace`}
 						</p>
 					</div>
+
+					<CreateProjectPanel />
 
 					<div className="flex flex-col gap-4">
 						<div className="flex items-center gap-4">
