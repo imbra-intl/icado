@@ -288,7 +288,7 @@ export class FrappeOAuthProvider extends BaseOAuthProvider {
 		const scopesRaw = envString(env, 'FRAPPE_OAUTH_SCOPES');
 		const scopes = scopesRaw
 			? scopesRaw.split(/\s+/).filter(Boolean)
-			: ['openid', 'email', 'profile'];
+			: ['openid'];
 
 		return {
 			missing: [],
