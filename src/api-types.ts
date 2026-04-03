@@ -275,6 +275,10 @@ export interface AuthProvidersResponseData {
   csrfExpiresIn?: number;
 }
 
+export interface FrappeSettingsUrlData {
+  url: string;
+}
+
 export interface CsrfTokenResponseData {
   token: string;
   headerName: string;

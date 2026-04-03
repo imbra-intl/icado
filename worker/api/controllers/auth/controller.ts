@@ -33,6 +33,28 @@ import { FrappeOAuthProvider } from '../../../services/oauth/frappe';
 export class AuthController extends BaseController {
     static logger = createLogger('AuthController');
 
+    private static getEnvString(env: Env, key: string): string | null {
+        const value = (env as unknown as Record<string, unknown>)[key];
+        if (typeof value !== 'string') {
+            return null;
+        }
+        const trimmed = value.trim();
+        return trimmed.length > 0 ? trimmed : null;
+    }
+
+    private static getFrappeSettingsUrl(env: Env): string | null {
+        const baseUrl =
+            this.getEnvString(env, 'FRAPPE_BASE_URL') ||
+            this.getEnvString(env, 'FRAPPE_OAUTH_BASE_URL');
+
+        if (!baseUrl) {
+            return null;
+        }
+
+        const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+        return new URL('ipanel/settings', normalizedBase).toString();
+    }
+
     static hasFrappeOAuthProvider(env: Env): boolean {
         return FrappeOAuthProvider.isConfigured(env);
     }
@@ -777,6 +799,29 @@ export class AuthController extends BaseController {
         } catch (error) {
             this.logger.error('Get auth providers error', error);
             return AuthController.createErrorResponse('Failed to get authentication providers', 500);
+        }
+    }
+
+    /**
+     * Get Frappe settings URL for redirect from iCado settings route.
+     * GET /api/auth/frappe-settings-url
+     */
+    static async getFrappeSettingsRedirectUrl(
+        _request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        _context: RouteContext
+    ): Promise<Response> {
+        try {
+            const url = this.getFrappeSettingsUrl(env);
+            if (!url) {
+                return AuthController.createErrorResponse('settings URL is not configured', 400);
+            }
+
+            return AuthController.createSuccessResponse({ url });
+        } catch (error) {
+            this.logger.error('Get settings URL error', error);
+            return AuthController.createErrorResponse('Failed to get settings URL', 500);
         }
     }
 }

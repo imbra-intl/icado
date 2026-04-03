@@ -5,7 +5,7 @@ import App from './App';
 import Home from './routes/home';
 import Chat from './routes/chat/chat';
 import Profile from './routes/profile';
-import Settings from './routes/settings/index';
+import SettingsRedirect from './routes/settings/redirect';
 import AppsPage from './routes/apps';
 import AppView from './routes/app';
 import DiscoverPage from './routes/discover';
@@ -30,7 +30,7 @@ const routes = [
 			},
 			{
 				path: 'settings',
-				element: React.createElement(ProtectedRoute, { children: React.createElement(Settings) }),
+				element: React.createElement(ProtectedRoute, { children: React.createElement(SettingsRedirect) }),
 			},
 			{
 				path: 'apps',

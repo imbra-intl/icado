@@ -48,6 +48,7 @@ import type{
 	RegisterResponseData,
 	ProfileResponseData,
 	AuthProvidersResponseData,
+	FrappeSettingsUrlData,
 	CsrfTokenResponseData,
 	OAuthProvider,
 	CodeGenArgs,
@@ -1173,6 +1174,13 @@ class ApiClient {
 	 */
 	async getAuthProviders(): Promise<ApiResponse<AuthProvidersResponseData>> {
 		return this.request<AuthProvidersResponseData>('/api/auth/providers');
+	}
+
+	/**
+	 * Get Frappe settings URL for external settings redirect.
+	 */
+	async getFrappeSettingsUrl(): Promise<ApiResponse<FrappeSettingsUrlData>> {
+		return this.request<FrappeSettingsUrlData>('/api/auth/frappe-settings-url');
 	}
 
 	/**

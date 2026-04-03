@@ -154,6 +154,7 @@
         "ALLOWED_EMAIL": "imbra.intl@gmail.com",
         "DISPATCH_NAMESPACE": "icado",
         "ENABLE_READ_REPLICAS": "true",
+        "FRAPPE_BASE_URL": "https://imbra.co.zm",
         "CLOUDFLARE_AI_GATEWAY": "icado-gateway",
         "PLATFORM_CAPABILITIES": {
             "features": {
