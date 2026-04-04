@@ -256,19 +256,34 @@ export function broadcastToConnections<T extends WebSocketMessageType>(
     }
 }
 
+type MessageConnection = WebSocket | Connection;
+
+const isAgentConnection = (connection: MessageConnection): connection is Connection => {
+    return typeof (connection as Connection).id === 'string';
+};
+
 export function sendToConnection<T extends WebSocketMessageType>(
-    connection: WebSocket, 
+    connection: MessageConnection,
     type: T, 
     data: WebSocketMessageData<T>
 ): void {
     try {
+        if (isAgentConnection(connection)) {
+            // Agent Connection expects structured send: send(type, payload)
+            (connection as unknown as { send: (...args: unknown[]) => void }).send(
+                type as string,
+                data as Record<string, unknown>,
+            );
+            return;
+        }
         const message: WebSocketMessage = { type, ...data } as WebSocketMessage;
         connection.send(JSON.stringify(message));
     } catch (error) {
-        console.error(`Error sending message to connection ${connection.url}:`, error);
+        const connectionLabel = isAgentConnection(connection) ? connection.id : connection.url;
+        console.error(`Error sending message to connection ${connectionLabel}:`, error);
     }
 }
 
-export function sendError(connection: WebSocket, errorMessage: string): void {
+export function sendError(connection: MessageConnection, errorMessage: string): void {
     sendToConnection(connection, 'error', { error: errorMessage });
 }
