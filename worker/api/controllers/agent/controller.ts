@@ -139,8 +139,6 @@ export class CodingAgentController extends BaseController {
                 query,
                 agentId,
                 generationType: 'Project Creation',
-                referenceDoctype: 'Vibe Projects',
-                referenceName: agentId,
             });
             if (!creditCharge.success) {
                 return CodingAgentController.createErrorResponse(

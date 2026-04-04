@@ -263,7 +263,7 @@ export class FrappeBridgeService {
 			return undefined;
 		}
 
-		const direct = readString(data, ['reason', 'error', 'detail', 'exc']);
+		const direct = readString(data, ['reason', 'error', 'detail', 'exc', '_error_message', 'exception']);
 		if (direct) {
 			return direct;
 		}
@@ -272,6 +272,47 @@ export class FrappeBridgeService {
 		if (typeof nestedMessage === 'string') {
 			const trimmed = nestedMessage.trim();
 			return trimmed.length > 0 ? trimmed : undefined;
+		}
+
+		if (isRecord(nestedMessage)) {
+			const nested = this.extractReason(nestedMessage);
+			if (nested) {
+				return nested;
+			}
+		}
+
+		const serverMessages = data._server_messages;
+		if (typeof serverMessages === 'string') {
+			try {
+				const parsedServerMessages = JSON.parse(serverMessages);
+				if (Array.isArray(parsedServerMessages) && parsedServerMessages.length > 0) {
+					for (const item of parsedServerMessages) {
+						if (typeof item === 'string') {
+							try {
+								const parsedItem = JSON.parse(item);
+								if (isRecord(parsedItem)) {
+									const parsedReason =
+										readString(parsedItem, ['message', 'title', 'indicator']) ||
+										this.extractReason(parsedItem);
+									if (parsedReason) {
+										return parsedReason;
+									}
+								}
+							} catch {
+								const trimmed = item.trim();
+								if (trimmed) {
+									return trimmed;
+								}
+							}
+						}
+					}
+				}
+			} catch {
+				const trimmed = serverMessages.trim();
+				if (trimmed) {
+					return trimmed;
+				}
+			}
 		}
 
 		return undefined;
@@ -650,6 +691,12 @@ export class FrappeBridgeService {
 		request: Request,
 		input: FrappeCreditChargeInput,
 	): Promise<FrappeCreditChargeResult> {
+		const hasSharedSecret = Boolean(this.getEnvString('FRAPPE_SHARED_SECRET'));
+		const hasApiTokenPair = Boolean(
+			this.getEnvString('FRAPPE_API_KEY') && this.getEnvString('FRAPPE_API_SECRET'),
+		);
+		const hasBearerToken = Boolean(this.getEnvString('FRAPPE_BEARER_TOKEN'));
+
 		const strictCharge = this.getEnvBoolean(
 			'FRAPPE_STRICT_CREDIT_CHARGE',
 			this.getEnvBoolean('FRAPPE_STRICT_CREDIT_VALIDATION', false),
@@ -670,6 +717,23 @@ export class FrappeBridgeService {
 			return {
 				success: true,
 				reason: 'Frappe credit charge endpoint is not configured',
+				source: 'fallback',
+			};
+		}
+
+		if (!hasSharedSecret && !hasApiTokenPair && !hasBearerToken) {
+			const reason =
+				'No Frappe auth configured for credit charge. Set FRAPPE_SHARED_SECRET or API token credentials.';
+			if (strictCharge) {
+				return {
+					success: false,
+					reason,
+					source: 'frappe',
+				};
+			}
+			return {
+				success: true,
+				reason,
 				source: 'fallback',
 			};
 		}

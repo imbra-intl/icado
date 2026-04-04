@@ -291,8 +291,6 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
             query,
             agentId: this.getAgentId(),
             generationType: 'Chat',
-            referenceDoctype: 'Vibe Projects',
-            referenceName: this.getAgentId(),
         });
 
         return {
