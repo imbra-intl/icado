@@ -175,6 +175,16 @@ export function CreateProjectPanel() {
 
 	return (
 		<div className="mx-auto w-full max-w-3xl px-4 py-12 text-center">
+			<div className="mb-10 flex items-center justify-center gap-3">
+				<img
+					src="https://imbra.co.zm/assets/isaas/logo/imbra-logo.png"
+					alt="Imbra"
+					className="h-8 w-auto object-contain"
+				/>
+				<span className="text-text-tertiary/60 text-xl font-light">|</span>
+				<span className="text-lg font-semibold tracking-wide text-text-primary">iCado</span>
+			</div>
+
 			{/* Heading */}
 			<h1 className="mb-3 text-5xl font-bold tracking-tight text-text-primary">
 				Create a new app
