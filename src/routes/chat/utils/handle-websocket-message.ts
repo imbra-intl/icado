@@ -598,7 +598,17 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             }
 
             case 'deployment_failed': {
+                setIsPreviewDeploying(false);
+                setIsRedeployReady(true);
                 toast.error(message.error);
+                if (message.error.includes('Containers have not been enabled for this Durable Object class')) {
+                    sendMessage(
+                        createAIMessage(
+                            'deployment_failed',
+                            'Preview deployment is unavailable because Cloudflare Containers are not enabled for this worker class.',
+                        ),
+                    );
+                }
                 break;
             }
 

@@ -46,6 +46,87 @@ export interface PhaseTimelineItem {
 	timestamp: number;
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
+};
+
+const tryParseJson = (input: string): unknown => {
+	try {
+		return JSON.parse(input);
+	} catch {
+		return null;
+	}
+};
+
+const inferLegacyMessageType = (payload: Record<string, unknown>): string | null => {
+	if (typeof payload.type === 'string' && !payload.type.trim().startsWith('{')) {
+		return payload.type;
+	}
+	const state = payload.state;
+	if (isRecord(state)) {
+		if (Array.isArray(state.runningHistory)) {
+			return 'conversation_state';
+		}
+		if (typeof state.behaviorType === 'string' || typeof state.projectType === 'string') {
+			return 'cf_agent_state';
+		}
+	}
+	if (typeof payload.error === 'string') {
+		return 'error';
+	}
+	return null;
+};
+
+const normalizeWebSocketMessage = (rawData: unknown): WebSocketMessage | null => {
+	if (typeof rawData !== 'string') {
+		return null;
+	}
+
+	const firstPass = tryParseJson(rawData);
+	if (typeof firstPass === 'string') {
+		const secondPass = tryParseJson(firstPass);
+		if (isRecord(secondPass) && typeof secondPass.type === 'string') {
+			return secondPass as unknown as WebSocketMessage;
+		}
+	}
+
+	if (!isRecord(firstPass)) {
+		return null;
+	}
+
+	const typedFirstPass = firstPass as Record<string, unknown>;
+
+	// Agent Connection wrappers can deliver JSON as `type: "<json>"`.
+	if (typeof typedFirstPass.type === 'string' && typedFirstPass.type.trim().startsWith('{')) {
+		const nested = tryParseJson(typedFirstPass.type);
+		if (isRecord(nested)) {
+			const nestedType = inferLegacyMessageType(nested);
+			if (nestedType) {
+				return { type: nestedType, ...nested } as unknown as WebSocketMessage;
+			}
+		}
+	}
+
+	// Some wrappers send payload as `{ type, data }`.
+	if (
+		typeof typedFirstPass.type === 'string' &&
+		isRecord(typedFirstPass.data) &&
+		Object.keys(typedFirstPass).length <= 3
+	) {
+		return {
+			type: typedFirstPass.type,
+			...typedFirstPass.data,
+		} as unknown as WebSocketMessage;
+	}
+
+	const firstPassType = inferLegacyMessageType(typedFirstPass);
+	if (firstPassType) {
+		return { type: firstPassType, ...typedFirstPass } as unknown as WebSocketMessage;
+	}
+
+	return null;
+};
+
 export function useChat({
 	chatId: urlChatId,
 	query: userQuery,
@@ -341,12 +422,18 @@ export function useChat({
 				});
 
 				ws.addEventListener('message', (event) => {
-					try {
-						const message: WebSocketMessage = JSON.parse(event.data);
-						handleWebSocketMessage(ws, message);
-					} catch (parseError) {
-						logger.error('❌ Error parsing WebSocket message:', parseError, event.data);
+					const message = normalizeWebSocketMessage(event.data);
+					if (!message) {
+						logger.error('❌ Error parsing WebSocket message:', event.data);
+						onDebugMessage?.(
+							'warning',
+							'Malformed WebSocket message',
+							typeof event.data === 'string' ? event.data : String(event.data),
+							'WebSocket',
+						);
+						return;
 					}
+					handleWebSocketMessage(ws, message);
 				});
 
 				ws.addEventListener('error', (error) => {
