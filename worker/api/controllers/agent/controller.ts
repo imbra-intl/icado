@@ -133,6 +133,22 @@ export class CodingAgentController extends BaseController {
             const projectType = resolveProjectType(body);
             const behaviorType = resolveBehaviorType(body);
 
+            const creditCharge = await frappeBridgeService.chargeCredits(request, {
+                user,
+                action: 'create_project',
+                query,
+                agentId,
+                generationType: 'Project Creation',
+                referenceDoctype: 'Vibe Projects',
+                referenceName: agentId,
+            });
+            if (!creditCharge.success) {
+                return CodingAgentController.createErrorResponse(
+                    creditCharge.reason || 'Failed to charge credits for project creation',
+                    402,
+                );
+            }
+
             this.logger.info(`Resolved behaviorType: ${behaviorType}, projectType: ${projectType} for agent ${agentId}`);
                                 
             // Fetch all user model configs, api keys and agent instance at once
@@ -153,6 +169,7 @@ export class CodingAgentController extends BaseController {
                 metadata: {
                     agentId: agentId,
                     userId: user.id,
+                    userEmail: user.email,
                 },
                 userModelConfigs,
                 runtimeOverrides,

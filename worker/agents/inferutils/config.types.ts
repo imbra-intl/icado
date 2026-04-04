@@ -420,6 +420,7 @@ export type AgentActionKey = keyof AgentConfig;
 export type InferenceMetadata = {
     agentId: string;
     userId: string;
+    userEmail?: string;
     // llmRateLimits: LLMCallsRateLimitConfig;
 }
 

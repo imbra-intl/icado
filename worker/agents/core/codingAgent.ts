@@ -31,6 +31,7 @@ import { SecretsClient, type UserSecretsStoreStub } from '../../services/secrets
 import { StateMigration } from './stateMigration';
 import { PendingWsTicket, TicketConsumptionResult } from '../../types/auth-types';
 import { WsTicketManager } from '../../utils/wsTicketManager';
+import { FrappeBridgeService } from '../../services/frappe/FrappeBridgeService';
 
 const DEFAULT_CONVERSATION_SESSION_ID = 'default';
 
@@ -254,6 +255,50 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
 
     getAgentId() {
         return this.state.metadata.agentId;
+    }
+
+    private getBillingUser(): { id: string; email: string; hasEmail: boolean } | null {
+        const userId = (this.state.metadata.userId || '').trim();
+        const userEmail = (this.state.metadata.userEmail || '').trim();
+        if (!userId && !userEmail) {
+            return null;
+        }
+        const email = userEmail || userId;
+        const id = userId || email;
+        return { id, email, hasEmail: Boolean(userEmail) };
+    }
+
+    async chargeCreditsForChatInput(query: string): Promise<{ success: boolean; reason?: string }> {
+        const user = this.getBillingUser();
+        if (!user) {
+            this.logger().warn('Skipping chat credit charge: billing user metadata missing');
+            return { success: true };
+        }
+
+        if (!user.hasEmail && !user.id.includes('@')) {
+            this.logger().warn('Skipping chat credit charge: missing email in legacy agent metadata', {
+                userId: user.id,
+                agentId: this.getAgentId(),
+            });
+            return { success: true };
+        }
+
+        const bridge = new FrappeBridgeService(this.env);
+        const chargeRequest = new Request('https://icado.internal/credit-charge', { method: 'POST' });
+        const chargeResult = await bridge.chargeCredits(chargeRequest, {
+            user,
+            action: 'chat_input',
+            query,
+            agentId: this.getAgentId(),
+            generationType: 'Chat',
+            referenceDoctype: 'Vibe Projects',
+            referenceName: this.getAgentId(),
+        });
+
+        return {
+            success: chargeResult.success,
+            reason: chargeResult.reason,
+        };
     }
     
     getWebSockets(): WebSocket[] {
@@ -547,7 +592,7 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
      * Delegates to centralized handler which can access both behavior and objective
      */
     async onMessage(connection: Connection, message: string): Promise<void> {
-        handleWebSocketMessage(this, connection, message);
+        await handleWebSocketMessage(this, connection, message);
     }
     
     /**

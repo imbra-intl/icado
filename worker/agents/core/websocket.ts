@@ -8,11 +8,11 @@ import type { CodeGeneratorAgent } from './codingAgent';
 
 const logger = createLogger('CodeGeneratorWebSocket');
 
-export function handleWebSocketMessage(
+export async function handleWebSocketMessage(
     agent: CodeGeneratorAgent, 
     connection: Connection, 
     message: string
-): void {
+): Promise<void> {
     try {
         logger.info(`Received WebSocket message from ${connection.id}: ${message}`);
         const parsedMessage = JSON.parse(message);
@@ -164,11 +164,19 @@ export function handleWebSocketMessage(
                         }
                     }
                 }
-                
-                agent.handleUserInput(parsedMessage.message, parsedMessage.images).catch((error: unknown) => {
+
+                const chargeResult = await agent.chargeCreditsForChatInput(parsedMessage.message);
+                if (!chargeResult.success) {
+                    sendError(connection, chargeResult.reason || 'Insufficient credits');
+                    return;
+                }
+
+                try {
+                    await agent.handleUserInput(parsedMessage.message, parsedMessage.images);
+                } catch (error: unknown) {
                     logger.error('Error handling user suggestion:', error);
                     sendError(connection, `Error processing user suggestion: ${error instanceof Error ? error.message : String(error)}`);
-                });
+                }
                 break;
             case WebSocketMessageRequests.GET_MODEL_CONFIGS:
                 logger.info('Fetching model configurations');

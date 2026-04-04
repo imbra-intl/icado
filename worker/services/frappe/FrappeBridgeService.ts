@@ -32,6 +32,27 @@ export interface FrappeCreditValidationResult {
 	source: 'frappe' | 'fallback';
 }
 
+export interface FrappeCreditChargeInput {
+	user: AuthUser;
+	action: CreditValidationAction;
+	query?: string;
+	agentId?: string;
+	inputTokens?: number;
+	outputTokens?: number;
+	model?: string;
+	generationType?: string;
+	referenceDoctype?: string;
+	referenceName?: string;
+}
+
+export interface FrappeCreditChargeResult {
+	success: boolean;
+	reason?: string;
+	creditsCharged?: number;
+	totalCredits?: number;
+	source: 'frappe' | 'fallback';
+}
+
 export interface FrappeCreditSummaryInput {
 	user: AuthUser;
 }
@@ -409,6 +430,14 @@ export class FrappeBridgeService {
 		return Number.isFinite(summary.totalCredits) ? summary.totalCredits : undefined;
 	}
 
+	private estimateTokensFromText(value?: string): number {
+		const text = (value || '').trim();
+		if (!text) {
+			return 1;
+		}
+		return Math.max(1, Math.ceil(text.length / 4));
+	}
+
 	private async postJson(request: Request, endpoint: string, payload: unknown): Promise<FrappeCallResult> {
 		const timeoutMs = this.getEnvNumber('FRAPPE_HTTP_TIMEOUT_MS', 12000);
 		const controller = new AbortController();
@@ -612,6 +641,112 @@ export class FrappeBridgeService {
 		return {
 			allowed: normalized.allowed,
 			reason: normalized.reason,
+			totalCredits: this.extractTotalCredits(callResult.data),
+			source: 'frappe',
+		};
+	}
+
+	async chargeCredits(
+		request: Request,
+		input: FrappeCreditChargeInput,
+	): Promise<FrappeCreditChargeResult> {
+		const strictCharge = this.getEnvBoolean(
+			'FRAPPE_STRICT_CREDIT_CHARGE',
+			this.getEnvBoolean('FRAPPE_STRICT_CREDIT_VALIDATION', false),
+		);
+		const endpoint = this.resolveEndpoint(
+			'FRAPPE_CREDITS_CHARGE_URL',
+			'/api/method/isaas.api.icado.charge_ai_generation',
+		);
+
+		if (!endpoint) {
+			if (strictCharge) {
+				return {
+					success: false,
+					reason: 'Frappe credit charge endpoint is not configured',
+					source: 'frappe',
+				};
+			}
+			return {
+				success: true,
+				reason: 'Frappe credit charge endpoint is not configured',
+				source: 'fallback',
+			};
+		}
+
+		const estimatedInput = this.estimateTokensFromText(input.query);
+		const inputTokens = Math.max(1, Math.round(input.inputTokens ?? estimatedInput));
+		const outputTokens = Math.max(
+			0,
+			Math.round(input.outputTokens ?? Math.max(1, Math.ceil(inputTokens * 0.25))),
+		);
+		const generationType =
+			input.generationType ||
+			(input.action === 'create_project' ? 'Project Creation' : 'Chat');
+
+		const payload = {
+			user_id: input.user.id,
+			email: input.user.email,
+			action: input.action,
+			agent_id: input.agentId,
+			input_tokens: inputTokens,
+			output_tokens: outputTokens,
+			prompt: input.query,
+			generation_type: generationType,
+			model: input.model,
+			reference_doctype: input.referenceDoctype,
+			reference_name: input.referenceName,
+			source: 'icado',
+		};
+
+		const callResult = await this.postJson(request, endpoint, payload);
+		if (!callResult.ok) {
+			const reason = callResult.errorMessage || 'Frappe credit charge failed';
+			if (strictCharge) {
+				return {
+					success: false,
+					reason,
+					source: 'frappe',
+				};
+			}
+
+			this.logger.warn('Frappe credit charge unavailable, allowing by fallback policy', {
+				reason,
+				status: callResult.status,
+				action: input.action,
+			});
+			return {
+				success: true,
+				reason,
+				source: 'fallback',
+			};
+		}
+
+		const payloadData = this.unwrapMessagePayload(callResult.data);
+		if (typeof payloadData === 'boolean') {
+			return {
+				success: payloadData,
+				source: 'frappe',
+				totalCredits: this.extractTotalCredits(callResult.data),
+			};
+		}
+
+		if (!isRecord(payloadData)) {
+			return {
+				success: true,
+				source: 'frappe',
+				totalCredits: this.extractTotalCredits(callResult.data),
+			};
+		}
+
+		const success = readBoolean(payloadData, ['success', 'ok', 'allowed']) ?? true;
+		const reason = readString(payloadData, ['reason', 'message', 'error', 'detail', 'exc']);
+		const creditsCharged = readNumber(payloadData, ['credits_charged', 'creditsCharged']);
+
+		return {
+			success,
+			reason: reason || (success ? undefined : 'Credit charge rejected'),
+			creditsCharged,
 			totalCredits: this.extractTotalCredits(callResult.data),
 			source: 'frappe',
 		};
