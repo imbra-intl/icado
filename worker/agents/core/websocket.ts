@@ -24,7 +24,7 @@ export async function handleWebSocketMessage(
                 logger.info(`Received session init message from ${connection.id}, Disable for now`);
                 break;
             }
-            case WebSocketMessageRequests.GENERATE_ALL:
+            case WebSocketMessageRequests.GENERATE_ALL: {
                 // Set shouldBeGenerating flag to indicate persistent intent
                 agent.setState({ 
                     ...agent.state, 
@@ -39,6 +39,8 @@ export async function handleWebSocketMessage(
                     // });
                     return;
                 }
+
+                const isInitialGeneration = !agent.getBehavior().isMVPGenerated();
                 
                 // Start generation process
                 logger.info('Starting code generation process');
@@ -46,16 +48,33 @@ export async function handleWebSocketMessage(
                     logger.error('Error during code generation:', error);
                     sendError(connection, `Error generating files: ${error instanceof Error ? error.message : String(error)}`);
                 }).finally(() => {
-                    // Only clear shouldBeGenerating on successful completion
-                    // (errors might want to retry, so this could be handled differently)
-                    if (!agent.getBehavior().isCodeGenerating()) {
-                        agent.setState({ 
-                            ...agent.state, 
-                            shouldBeGenerating: false 
-                        });
-                    }
+                    void (async () => {
+                        if (isInitialGeneration && agent.getBehavior().isMVPGenerated()) {
+                            const usage = agent.captureTokenUsageSnapshot();
+                            const chargeResult = await agent.chargeCreditsForProjectCreation(
+                                agent.state.query,
+                                usage,
+                            );
+                            if (!chargeResult.success) {
+                                logger.error('Failed to charge credits for project creation', {
+                                    reason: chargeResult.reason,
+                                    agentId: agent.getAgentId(),
+                                    usage,
+                                });
+                                sendError(connection, chargeResult.reason || 'Failed to charge credits');
+                            }
+                        }
+
+                        if (!agent.getBehavior().isCodeGenerating()) {
+                            agent.setState({
+                                ...agent.state,
+                                shouldBeGenerating: false
+                            });
+                        }
+                    })();
                 });
                 break;
+            }
             case WebSocketMessageRequests.DEPLOY:
                 agent.deployProject().then((deploymentResult) => {
                     if (!deploymentResult.success) {
@@ -165,17 +184,44 @@ export async function handleWebSocketMessage(
                     }
                 }
 
-                const chargeResult = await agent.chargeCreditsForChatInput(parsedMessage.message);
-                if (!chargeResult.success) {
-                    sendError(connection, chargeResult.reason || 'Insufficient credits');
+                const creditValidation = await agent.validateCredits('chat_input', parsedMessage.message);
+                if (!creditValidation.allowed) {
+                    sendError(connection, creditValidation.reason || 'Insufficient credits');
                     return;
                 }
 
+                const usageSnapshot = agent.captureTokenUsageSnapshot();
+                let processError: unknown = null;
                 try {
                     await agent.handleUserInput(parsedMessage.message, parsedMessage.images);
+                    if (agent.getBehavior().isCodeGenerating()) {
+                        await agent.getBehavior().waitForGeneration();
+                    }
                 } catch (error: unknown) {
+                    processError = error;
                     logger.error('Error handling user suggestion:', error);
                     sendError(connection, `Error processing user suggestion: ${error instanceof Error ? error.message : String(error)}`);
+                }
+
+                const usageDelta = agent.getTokenUsageDelta(usageSnapshot);
+                const usedTokens =
+                    usageDelta.inputTokens > 0 ||
+                    usageDelta.outputTokens > 0 ||
+                    usageDelta.totalTokens > 0;
+
+                if (!processError || usedTokens) {
+                    const chargeResult = await agent.chargeCreditsForChatInput(
+                        parsedMessage.message,
+                        usageDelta,
+                    );
+                    if (!chargeResult.success) {
+                        logger.error('Failed to charge credits for chat input', {
+                            reason: chargeResult.reason,
+                            agentId: agent.getAgentId(),
+                            usageDelta,
+                        });
+                        sendError(connection, chargeResult.reason || 'Failed to charge credits');
+                    }
                 }
                 break;
             case WebSocketMessageRequests.GET_MODEL_CONFIGS:

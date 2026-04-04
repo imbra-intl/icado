@@ -21,7 +21,7 @@ import { handleWebSocketMessage, handleWebSocketClose, broadcastToConnections, s
 import { WebSocketMessageData, WebSocketMessageType } from "worker/api/websocketTypes";
 import { PreviewType, TemplateDetails } from "worker/services/sandbox/sandboxTypes";
 import { WebSocketMessageResponses } from "../constants";
-import { AppService, ModelConfigService } from "worker/database";
+import { AppService, ModelConfigService, UserService } from 'worker/database';
 import { ConversationMessage, ConversationState } from "../inferutils/common";
 import { ImageAttachment } from "worker/types/image-attachment";
 import { RateLimitExceededError } from "shared/types/errors";
@@ -32,6 +32,13 @@ import { StateMigration } from './stateMigration';
 import { PendingWsTicket, TicketConsumptionResult } from '../../types/auth-types';
 import { WsTicketManager } from '../../utils/wsTicketManager';
 import { FrappeBridgeService } from '../../services/frappe/FrappeBridgeService';
+import type { CreditValidationAction } from '../../services/frappe/FrappeBridgeService';
+import { hasInferenceTokenUsage } from '../inferutils/tokenUsage';
+import type { InferenceTokenUsage } from '../inferutils/tokenUsage';
+import {
+	getAgentTokenUsageDelta,
+	getAgentTokenUsageSnapshot,
+} from '../../services/frappe/AgentTokenUsageTracker';
 
 const DEFAULT_CONVERSATION_SESSION_ID = 'default';
 
@@ -49,6 +56,7 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
     
     /** Ticket manager for WebSocket authentication */
     private ticketManager = new WsTicketManager();
+    private cachedBillingEmail: string | null = null;
     
     // Services
     readonly fileManager: FileManager;
@@ -257,46 +265,133 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         return this.state.metadata.agentId;
     }
 
-    private getBillingUser(): { id: string; email: string; hasEmail: boolean } | null {
-        const userId = (this.state.metadata.userId || '').trim();
-        const userEmail = (this.state.metadata.userEmail || '').trim();
-        if (!userId && !userEmail) {
-            return null;
-        }
-        const email = userEmail || userId;
-        const id = userId || email;
-        return { id, email, hasEmail: Boolean(userEmail) };
+    captureTokenUsageSnapshot(): InferenceTokenUsage {
+        return getAgentTokenUsageSnapshot(this.getAgentId());
     }
 
-    async chargeCreditsForChatInput(query: string): Promise<{ success: boolean; reason?: string }> {
-        const user = this.getBillingUser();
-        if (!user) {
-            this.logger().warn('Skipping chat credit charge: billing user metadata missing');
-            return { success: true };
+    getTokenUsageDelta(snapshot: InferenceTokenUsage): InferenceTokenUsage {
+        return getAgentTokenUsageDelta(this.getAgentId(), snapshot);
+    }
+
+    private async resolveBillingUser(): Promise<{ id: string; email: string } | null> {
+        const userId = (this.state.metadata.userId || '').trim();
+        const metadataEmail = (this.state.metadata.userEmail || '').trim();
+
+        if (!userId && !metadataEmail) {
+            return null;
         }
 
-        if (!user.hasEmail && !user.id.includes('@')) {
-            this.logger().warn('Skipping chat credit charge: missing email in legacy agent metadata', {
-                userId: user.id,
-                agentId: this.getAgentId(),
+        const emailFromId = userId.includes('@') ? userId : '';
+        const cachedEmail = (this.cachedBillingEmail || '').trim();
+        const emailCandidate = metadataEmail || emailFromId || cachedEmail;
+
+        if (emailCandidate) {
+            if (!metadataEmail && emailCandidate) {
+                this.cachedBillingEmail = emailCandidate;
+            }
+            return {
+                id: userId || emailCandidate,
+                email: emailCandidate,
+            };
+        }
+
+        if (!userId) {
+            return null;
+        }
+
+        try {
+            const userService = new UserService(this.env);
+            const user = await userService.findUser({ id: userId });
+            const resolvedEmail = (user?.email || '').trim();
+            if (!resolvedEmail) {
+                return null;
+            }
+            this.cachedBillingEmail = resolvedEmail;
+            return {
+                id: userId,
+                email: resolvedEmail,
+            };
+        } catch (error) {
+            this.logger().warn('Failed to resolve billing email from user service', {
+                userId,
+                error: error instanceof Error ? error.message : String(error),
             });
+            return null;
+        }
+    }
+
+    private buildCreditsRequest(): Request {
+        return new Request('https://icado.internal/credits', { method: 'POST' });
+    }
+
+    async validateCredits(
+        action: CreditValidationAction,
+        query?: string,
+    ): Promise<{ allowed: boolean; reason?: string }> {
+        const user = await this.resolveBillingUser();
+        if (!user) {
+            this.logger().warn('Skipping credit validation: billing user metadata missing');
+            return { allowed: true };
+        }
+
+        const bridge = new FrappeBridgeService(this.env);
+        const validation = await bridge.validateCredits(this.buildCreditsRequest(), {
+            user,
+            action,
+            query,
+            agentId: this.getAgentId(),
+        });
+
+        return {
+            allowed: validation.allowed,
+            reason: validation.reason,
+        };
+    }
+
+    async chargeCredits(
+        action: CreditValidationAction,
+        query: string | undefined,
+        generationType: string,
+        usage: InferenceTokenUsage,
+    ): Promise<{ success: boolean; reason?: string }> {
+        const user = await this.resolveBillingUser();
+        if (!user) {
+            this.logger().warn('Skipping credit charge: billing user metadata missing');
             return { success: true };
         }
 
         const bridge = new FrappeBridgeService(this.env);
-        const chargeRequest = new Request('https://icado.internal/credit-charge', { method: 'POST' });
-        const chargeResult = await bridge.chargeCredits(chargeRequest, {
+        const chargeResult = await bridge.chargeCredits(this.buildCreditsRequest(), {
             user,
-            action: 'chat_input',
+            action,
             query,
             agentId: this.getAgentId(),
-            generationType: 'Chat',
+            generationType,
+            inputTokens: usage.inputTokens > 0 ? usage.inputTokens : undefined,
+            outputTokens: usage.outputTokens > 0 ? usage.outputTokens : 0,
         });
 
         return {
             success: chargeResult.success,
             reason: chargeResult.reason,
         };
+    }
+
+    async chargeCreditsForChatInput(
+        query: string,
+        usage: InferenceTokenUsage,
+    ): Promise<{ success: boolean; reason?: string }> {
+        return this.chargeCredits('chat_input', query, 'Chat', usage);
+    }
+
+    async chargeCreditsForProjectCreation(
+        query: string,
+        usage: InferenceTokenUsage,
+    ): Promise<{ success: boolean; reason?: string }> {
+        if (!hasInferenceTokenUsage(usage) && !query.trim()) {
+            return { success: true };
+        }
+        return this.chargeCredits('create_project', query, 'Project Creation', usage);
     }
     
     getWebSockets(): WebSocket[] {

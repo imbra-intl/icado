@@ -16,6 +16,13 @@ import {
 import { CompletionSignal, Message, MessageContent, MessageRole } from './common';
 import { ToolCallResult, ToolDefinition, toOpenAITool } from '../tools/types';
 import { AgentActionKey, AI_MODEL_CONFIG, AIModelConfig, AIModels, InferenceMetadata, type InferenceRuntimeOverrides } from './config.types';
+import {
+	addInferenceTokenUsage,
+	hasInferenceTokenUsage,
+	InferenceTokenUsage,
+	normalizeInferenceTokenUsage,
+	ZERO_TOKEN_USAGE,
+} from './tokenUsage';
 import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { getUserConfigurableSettings } from '../../config';
 import { SecurityError, RateLimitExceededError } from 'shared/types/errors';
@@ -184,6 +191,58 @@ function optimizeTextContent(content: string): string {
     content = content.trim();
 
     return content;
+}
+
+type UsageRecord = Record<string, unknown>;
+
+function isUsageRecord(value: unknown): value is UsageRecord {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readUsageNumber(record: UsageRecord, keys: string[]): number | undefined {
+    for (const key of keys) {
+        const value = record[key];
+        if (typeof value === 'number' && Number.isFinite(value)) {
+            return value;
+        }
+        if (typeof value === 'string') {
+            const parsed = Number(value.trim());
+            if (Number.isFinite(parsed)) {
+                return parsed;
+            }
+        }
+    }
+    return undefined;
+}
+
+function parseTokenUsage(value: unknown): InferenceTokenUsage | undefined {
+    if (!isUsageRecord(value)) {
+        return undefined;
+    }
+
+    const inputTokens =
+        readUsageNumber(value, ['input_tokens', 'prompt_tokens', 'tokens_in']) ?? 0;
+    const outputTokens =
+        readUsageNumber(value, ['output_tokens', 'completion_tokens', 'tokens_out']) ?? 0;
+    const totalTokens =
+        readUsageNumber(value, ['total_tokens', 'tokens_total']) ?? inputTokens + outputTokens;
+
+    const usage = normalizeInferenceTokenUsage({
+        inputTokens,
+        outputTokens,
+        totalTokens,
+    });
+    return hasInferenceTokenUsage(usage) ? usage : undefined;
+}
+
+function combineTokenUsage(
+    left?: InferenceTokenUsage,
+    right?: InferenceTokenUsage,
+): InferenceTokenUsage | undefined {
+    if (!left && !right) {
+        return undefined;
+    }
+    return addInferenceTokenUsage(left || ZERO_TOKEN_USAGE, right || ZERO_TOKEN_USAGE);
 }
 
 function buildGatewayPathname(cleanPathname: string, providerOverride?: AIGatewayProviders): string {
@@ -439,11 +498,13 @@ const claude_thinking_budget_tokens = {
 export type InferResponseObject<OutputSchema extends z.AnyZodObject> = {
     object: z.infer<OutputSchema>;
     toolCallContext?: ToolCallContext;
+    usage?: InferenceTokenUsage;
 };
 
 export type InferResponseString = {
     string: string;
     toolCallContext?: ToolCallContext;
+    usage?: InferenceTokenUsage;
 };
 
 /**
@@ -689,6 +750,7 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                 messages: messagesToPass as OpenAI.ChatCompletionMessageParam[],
                 max_completion_tokens: maxTokens || 150000,
                 stream: stream ? true : false,
+                ...(stream ? { stream_options: { include_usage: true } } : {}),
                 reasoning_effort: modelConfig.nonReasoning ? undefined : reasoning_effort,
                 temperature,
                 frequency_penalty,
@@ -719,6 +781,7 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
             throw error;
         }
         let toolCalls: ChatCompletionMessageFunctionToolCall[] = [];
+        let usage: InferenceTokenUsage | undefined;
 
         /*
         * Handle LLM response
@@ -736,6 +799,10 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                 
                 for await (const event of response) {
                     const delta = (event as ChatCompletionChunk).choices[0]?.delta;
+                    const eventUsage = parseTokenUsage((event as ChatCompletionChunk).usage);
+                    if (eventUsage) {
+                        usage = eventUsage;
+                    }
                     
                     // Provider-specific logging
                     const provider = modelName.split('/')[0];
@@ -802,6 +869,7 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                     content = message.content || '';
                     toolCalls = (message.tool_calls as ChatCompletionMessageFunctionToolCall[]) || [];
                 }
+                usage = parseTokenUsage(completion.usage);
             }
         } else {
             // If not streaming, get the full response content (response is ChatCompletion)
@@ -813,7 +881,8 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
             }
             toolCalls = allToolCalls.filter(tc => tc.function.name && tc.function.name.trim() !== '');
             // Also print the total number of tokens used in the prompt
-            const totalTokens = (response as OpenAI.ChatCompletion).usage?.total_tokens;
+            usage = parseTokenUsage((response as OpenAI.ChatCompletion).usage);
+            const totalTokens = usage?.totalTokens;
             console.log(`Total tokens used in prompt: ${totalTokens}`);
         }
 
@@ -832,7 +901,7 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
             // console.error('No content received from OpenAI', JSON.stringify(response, null, 2));
             // throw new Error('No content received from OpenAI');
             console.warn('No content received from OpenAI', JSON.stringify(response, null, 2));
-            return { string: "", toolCallContext };
+            return { string: "", toolCallContext, usage };
         }
         let executedToolCalls: ToolCallResult[] = [];
         if (tools) {
@@ -846,7 +915,7 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                     console.warn(`Tool call was aborted, ending tool call chain with the latest tool call result`);
 
                     const newToolCallContext = updateToolCallContext(toolCallContext, assistantMessage, executedToolCalls, completionConfig?.detector);
-                    return { string: content, toolCallContext: newToolCallContext };
+                    return { string: content, toolCallContext: newToolCallContext, usage };
                 }
                 // Otherwise, continue
             }
@@ -873,7 +942,8 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                 }
                 return {
                     string: content || newToolCallContext.completionSignal.summary || 'Task complete',
-                    toolCallContext: newToolCallContext
+                    toolCallContext: newToolCallContext,
+                    usage,
                 };
             }
 
@@ -906,7 +976,10 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                         onAssistantMessage,
                         completionConfig,
                     }, newToolCallContext);
-                    return output;
+                    return {
+                        ...output,
+                        usage: combineTokenUsage(usage, output.usage),
+                    };
                 } else {
                     const output = await infer({
                         env,
@@ -924,16 +997,19 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                         onAssistantMessage,
                         completionConfig,
                     }, newToolCallContext);
-                    return output;
+                    return {
+                        ...output,
+                        usage: combineTokenUsage(usage, output.usage),
+                    };
                 }
             } else {
                 console.log('No tool calls with results');
-                return { string: content, toolCallContext: newToolCallContext };
+                return { string: content, toolCallContext: newToolCallContext, usage };
             }
         }
 
         if (!schema) {
-            return { string: content, toolCallContext };
+            return { string: content, toolCallContext, usage };
         }
 
         try {
@@ -952,7 +1028,7 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                 throw new Error(`Failed to validate AI response against schema: ${result.error.message}`);
             }
 
-            return { object: result.data, toolCallContext };
+            return { object: result.data, toolCallContext, usage };
         } catch (parseError) {
             console.error('Error parsing response:', parseError);
             throw new InferError('Failed to parse response', content, toolCallContext);

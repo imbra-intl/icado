@@ -1,4 +1,11 @@
-import { infer, InferError, InferResponseString, InferResponseObject, AbortError, CompletionConfig } from './core';
+import {
+	infer,
+	InferError,
+	InferResponseString,
+	InferResponseObject,
+	AbortError,
+	CompletionConfig,
+} from './core';
 import { createAssistantMessage, createUserMessage, Message } from './common';
 import z from 'zod';
 // import { CodeEnhancementOutput, CodeEnhancementOutputType } from '../codegen/phasewiseGenerator';
@@ -11,6 +18,8 @@ import { RateLimitExceededError, SecurityError } from 'shared/types/errors';
 import { ToolDefinition } from '../tools/types';
 import { validateAgentConstraints } from 'worker/api/controllers/modelConfig/constraintHelper';
 import { isValidAIModel } from './config.types';
+import { hasInferenceTokenUsage } from './tokenUsage';
+import { recordAgentTokenUsage } from '../../services/frappe/AgentTokenUsageTracker';
 
 const logger = createLogger('InferenceUtils');
 
@@ -193,6 +202,10 @@ export async function executeInference<T extends z.AnyZodObject>(   {
                 completionConfig,
                 runtimeOverrides: context.runtimeOverrides,
             });
+
+            if (result && hasInferenceTokenUsage(result.usage)) {
+                recordAgentTokenUsage(context.metadata.agentId, result.usage);
+            }
             logger.info(`Successfully completed ${agentActionName} operation`);
             // console.log(result);
             return result;
