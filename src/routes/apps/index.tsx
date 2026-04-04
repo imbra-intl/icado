@@ -73,10 +73,7 @@ export default function AppsPage() {
 					transition={{ duration: 0.5 }}
 				>
 					{/* Header */}
-					<div className="mb-8">
-						<h1 className="text-6xl font-bold mb-3 text-accent">
-							MY APPS
-						</h1>
+					<div className="mb-2">
 						<p className="text-text-tertiary text-lg">
 							{loading
 								? 'Loading...'
