@@ -21,12 +21,6 @@ import { resolvePreviewUrl } from '../../../utils/urls';
 const PER_ATTEMPT_TIMEOUT_MS = 60000;  // 60 seconds per individual attempt
 const MASTER_DEPLOYMENT_TIMEOUT_MS = 300000;  // 5 minutes total
 const HEALTH_CHECK_INTERVAL_MS = 30000;
-const NON_RETRYABLE_DEPLOYMENT_ERRORS = [
-    'Containers have not been enabled for this Durable Object class',
-];
-
-const isNonRetryableDeploymentError = (errorMessage: string): boolean =>
-    NON_RETRYABLE_DEPLOYMENT_ERRORS.some((needle) => errorMessage.includes(needle));
 
 /**
  * Manages deployment operations for sandbox instances
@@ -420,15 +414,6 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
                 logger.warn(`Deployment attempt ${attempt} failed:`, error);
                 
                 const errorMsg = error instanceof Error ? error.message : String(error);
-
-                if (isNonRetryableDeploymentError(errorMsg)) {
-                    logger.error('Non-retryable deployment failure detected, aborting retries', {
-                        attempt,
-                        error: errorMsg,
-                    });
-                    callbacks?.onError?.({ error: errorMsg });
-                    throw new Error(errorMsg);
-                }
 
                 // Handle specific errors that require session reset
                 if (errorMsg.includes('Network connection lost') || 
