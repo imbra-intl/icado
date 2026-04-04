@@ -211,12 +211,17 @@ export class FrappeBridgeService {
 		headers.set('Content-Type', 'application/json');
 		headers.set('Accept', 'application/json');
 
+		const sharedSecret = this.getEnvString('FRAPPE_SHARED_SECRET');
+		if (sharedSecret) {
+			headers.set('X-Icado-Shared-Secret', sharedSecret);
+		}
+
 		const apiKey = this.getEnvString('FRAPPE_API_KEY');
 		const apiSecret = this.getEnvString('FRAPPE_API_SECRET');
 		const bearerToken = this.getEnvString('FRAPPE_BEARER_TOKEN');
-		if (apiKey && apiSecret) {
+		if (!sharedSecret && apiKey && apiSecret) {
 			headers.set('Authorization', `token ${apiKey}:${apiSecret}`);
-		} else if (bearerToken) {
+		} else if (!sharedSecret && bearerToken) {
 			headers.set('Authorization', `Bearer ${bearerToken}`);
 		}
 
