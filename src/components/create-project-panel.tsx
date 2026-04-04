@@ -119,9 +119,7 @@ export function CreateProjectPanel() {
 	};
 
 	const handleCreateApp = async () => {
-		if (isValidatingCredits) {
-			return;
-		}
+		if (isValidatingCredits) return;
 
 		if (query.length > MAX_AGENT_QUERY_LENGTH) {
 			toast.error(
@@ -176,19 +174,23 @@ export function CreateProjectPanel() {
 	};
 
 	return (
-		<div className="mb-8 rounded-2xl border border-accent/20 bg-bg-4/70 p-6 shadow-sm backdrop-blur dark:bg-bg-2/70">
-			<h2 className="mb-3 text-2xl font-semibold text-accent">Create a new app</h2>
-			<p className="mb-5 text-sm text-text-tertiary">
+		<div className="mx-auto w-full max-w-3xl px-4 py-12 text-center">
+			{/* Heading */}
+			<h1 className="mb-3 text-5xl font-bold tracking-tight text-text-primary">
+				Create a new app
+			</h1>
+			<p className="mb-10 text-base text-text-tertiary">
 				Describe what you want to build and start a new generation instantly.
 			</p>
 
+			{/* Input box */}
 			<form
 				method="POST"
 				onSubmit={(e) => {
 					e.preventDefault();
 					void handleCreateApp();
 				}}
-				className="flex min-h-[150px] flex-col rounded-[18px] border border-accent/30 bg-bg-4 p-5 shadow-textarea transition-all duration-200 dark:border-accent/50 dark:bg-bg-2"
+				className="flex min-h-[140px] flex-col rounded-2xl border border-accent/20 bg-bg-4 p-5 text-left dark:bg-bg-2"
 			>
 				<div
 					className={clsx(
@@ -207,7 +209,7 @@ export function CreateProjectPanel() {
 						name="query"
 						value={query}
 						placeholder={`Create a ${currentPlaceholderText}`}
-						className="z-20 w-full resize-none text-text-primary outline-0 ring-0 placeholder:text-text-primary/60"
+						className="z-20 w-full resize-none bg-transparent text-text-primary outline-0 ring-0 placeholder:text-text-primary/40"
 						onChange={(e) => {
 							setQuery(e.target.value);
 							adjustTextareaHeight();
@@ -227,36 +229,31 @@ export function CreateProjectPanel() {
 					)}
 				</div>
 
-				<div
-					className={clsx(
-						'mt-4 flex items-center pt-1',
-						showModeSelector ? 'justify-between' : 'justify-end',
-					)}
-				>
-					{showModeSelector && (
-						<ProjectModeSelector
-							value={projectMode}
-							onChange={setProjectMode}
-							modes={modeOptions}
-							className="flex-1"
-						/>
-					)}
-
-					<div className={clsx('flex items-center gap-2', showModeSelector && 'ml-4')}>
+				{/* Bottom bar */}
+				<div className="mt-4 flex items-center justify-between">
+					<div className="flex items-center gap-2">
 						<ImageUploadButton onFilesSelected={addImages} disabled={isProcessing} />
-						<button
-							type="submit"
-							disabled={!query.trim() || isValidatingCredits}
-							className="rounded-md bg-accent p-1 text-white transition-all duration-200 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 [&>*]:size-5"
-						>
-							<ArrowRight />
-						</button>
+						{showModeSelector && (
+							<ProjectModeSelector
+								value={projectMode}
+								onChange={setProjectMode}
+								modes={modeOptions}
+							/>
+						)}
 					</div>
+
+					<button
+						type="submit"
+						disabled={!query.trim() || isValidatingCredits}
+						className="rounded-xl bg-accent p-2.5 text-white transition-opacity duration-200 disabled:cursor-not-allowed disabled:opacity-40 [&>*]:size-5"
+					>
+						<ArrowRight />
+					</button>
 				</div>
 			</form>
 
 			{images.length > 0 && (
-				<div className="mt-4 flex items-start gap-2 rounded-xl border border-accent/20 bg-bg-4/50 px-4 py-3 shadow-sm dark:border-accent/30 dark:bg-bg-2/50">
+				<div className="mt-4 flex items-start gap-2 rounded-xl border border-accent/20 bg-bg-4/50 px-4 py-3 text-left dark:border-accent/30 dark:bg-bg-2/50">
 					<Info className="mt-0.5 size-4 flex-shrink-0 text-accent" />
 					<p className="text-xs leading-relaxed text-text-tertiary">
 						<span className="font-medium text-text-secondary">Images Beta:</span>{' '}
