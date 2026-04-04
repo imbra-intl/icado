@@ -158,8 +158,7 @@
         "FRAPPE_CREDITS_SUMMARY_URL": "/api/method/isaas.api.icado.get_user_credit_summary",
         "FRAPPE_CREDITS_VALIDATE_URL": "/api/method/isaas.api.icado.validate_user_credits",
         "FRAPPE_CREDITS_TOPUP_URL": "/ipanel/icado",
-        "FRAPPE_SHARED_SECRET": "",
-        "FRAPPE_STRICT_CREDIT_VALIDATION": "false",
+        "FRAPPE_STRICT_CREDIT_VALIDATION": "true",
         "CLOUDFLARE_AI_GATEWAY": "icado-gateway",
         "PLATFORM_CAPABILITIES": {
             "features": {
